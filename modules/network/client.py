@@ -196,8 +196,7 @@ class Client:
             ("music_master", "Гучність музики"),
             ("music_menu", "Музика головного меню"),
             ("music_game", "Музика гри"),
-            ("music_win", "Перемога"),
-            ("music_lose", "Поразка"),
+            ("music_result", "Перемога/програш"),
             ("sfx_master", "Гучність ефектів"),
         ]
         # UI params
@@ -506,12 +505,14 @@ class Client:
                                 if key.endswith("_minus") and rects[key].collidepoint(ev.pos):
                                     setting = key[:-6]
                                     self.play_sfx_list(self.sfx_click)
-                                    self.adjust_setting(setting, -0.05)
+                                    step = self.get_setting_step()
+                                    self.adjust_setting(setting, -step)
                                     break
                                 if key.endswith("_plus") and rects[key].collidepoint(ev.pos):
                                     setting = key[:-5]
                                     self.play_sfx_list(self.sfx_click)
-                                    self.adjust_setting(setting, 0.05)
+                                    step = self.get_setting_step()
+                                    self.adjust_setting(setting, step)
                                     break
                             if rects.get("popups_toggle") and rects["popups_toggle"].collidepoint(ev.pos):
                                 self.play_sfx_list(self.sfx_click)
@@ -591,8 +592,8 @@ class Client:
                 self.draw_board_background(screen, selected, hint_moves, hint_captures, item_targets, self.hover_cell)
                 if self.state:
                     self.draw_board_pieces(screen)
-                    self.draw_piece_animations(screen)
                     self.draw_mine_reveals(screen)
+                    self.draw_piece_animations(screen)
                     self.draw_explosions(screen)
                 self.draw_top_bar(screen, font)
                 self.draw_right_panel(screen, font, big_font)
@@ -1790,12 +1791,43 @@ class Client:
             r, g, b = self.colors["hint_item"]
             surf.fill((r, g, b, 140))
             self.hint_item_surface = surf
+        temp_reveal = self.get_temp_reveal_cells()
+        show_mines = self.has_mine_vision()
+        mines_active = self.state is not None and self.is_pack_active("minesweeper")
         for y in range(8):
             for x in range(8):
                 rect = pygame.Rect(bx + x*self.cell, by + y*self.cell, self.cell, self.cell)
                 color = self.colors["board_light"] if (x+y)%2==0 else self.colors["board_dark"]
                 pygame.draw.rect(screen, color, rect)
                 board_xy = self.display_to_board((x, y))
+                if mines_active and board_xy:
+                    board_x, board_y = board_xy
+                    try:
+                        cell_is_mine = self.state.mines[board_y][board_x] == 1
+                        is_revealed = self.state.revealed[board_y][board_x] or (board_x, board_y) in temp_reveal
+                        if is_revealed:
+                            if cell_is_mine:
+                                if self.mine_image:
+                                    screen.blit(self.mine_image, rect)
+                                else:
+                                    pygame.draw.circle(screen, self.colors["mine_secondary"], rect.center, self.cell//3)
+                            else:
+                                n = self.state.adj_counts[board_y][board_x]
+                                if n > 0:
+                                    img = self.get_number_image(n)
+                                    if img:
+                                        screen.blit(img, img.get_rect(center=rect.center))
+                                    else:
+                                        font = self.get_font("main", 24)
+                                        txt = font.render(str(n), True, (255,255,255))
+                                        screen.blit(txt, txt.get_rect(center=rect.center))
+                        elif show_mines and cell_is_mine:
+                            if self.mine_image:
+                                screen.blit(self.mine_image, rect)
+                            else:
+                                pygame.draw.circle(screen, self.colors["mine_primary"], rect.center, self.cell//3)
+                    except Exception:
+                        pass
                 effect = self.get_cell_effect_at(board_xy[0], board_xy[1]) if board_xy else None
                 if effect:
                     self.draw_chessplus_cell_effect(screen, rect, effect)
@@ -2033,34 +2065,10 @@ class Client:
         anim_dests = set()
         for anim in self.piece_animations:
             anim_dests.add(anim.get("to"))
-        temp_reveal = self.get_temp_reveal_cells()
-        show_mines = self.has_mine_vision()
         for y in range(8):
             for x in range(8):
                 rect = pygame.Rect(bx + x*self.cell, by + y*self.cell, self.cell, self.cell)
                 board_x, board_y = self.display_to_board((x, y))
-                # draw revealed numbers or mines if applicable
-                if self.is_pack_active("minesweeper"):
-                    cell_is_mine = self.state.mines[board_y][board_x] == 1
-                    is_revealed = self.state.revealed[board_y][board_x] or (board_x, board_y) in temp_reveal
-                    if is_revealed:
-                        if cell_is_mine:
-                            pygame.draw.circle(screen, self.colors["mine_secondary"], rect.center, self.cell//3)
-                        else:
-                            n = self.state.adj_counts[board_y][board_x]
-                            if n > 0:
-                                img = self.get_number_image(n)
-                                if img:
-                                    screen.blit(img, img.get_rect(center=rect.center))
-                                else:
-                                    font = self.get_font("main", 24)
-                                    txt = font.render(str(n), True, (255,255,255))
-                                    screen.blit(txt, txt.get_rect(center=rect.center))
-                    if show_mines and cell_is_mine:
-                        if self.mine_image:
-                            screen.blit(self.mine_image, rect)
-                        else:
-                            pygame.draw.circle(screen, self.colors["mine_primary"], rect.center, self.cell//3)
                 # draw piece if present
                 piece = self.state.board.get_piece(board_x, board_y)
                 if piece and (board_x, board_y) not in anim_dests:
@@ -2339,6 +2347,8 @@ class Client:
             return self.music_master
         if key == "sfx_master":
             return self.sfx_master
+        if key == "music_result":
+            return self.music_volumes.get("win", 1.0)
         if key.startswith("music_"):
             track = key.split("_", 1)[1]
             return self.music_volumes.get(track, 1.0)
@@ -2351,15 +2361,27 @@ class Client:
         elif key == "sfx_master":
             self.sfx_master = self.clamp(self.sfx_master + delta)
             self.update_sfx_volume()
+        elif key == "music_result":
+            current = self.music_volumes.get("win", 1.0)
+            new_val = self.clamp(current + delta)
+            self.music_volumes["win"] = new_val
+            self.music_volumes["lose"] = new_val
+            self.update_music_volume()
         elif key.startswith("music_"):
             track = key.split("_", 1)[1]
             current = self.music_volumes.get(track, 1.0)
             self.music_volumes[track] = self.clamp(current + delta)
             self.update_music_volume()
 
+    def get_setting_step(self):
+        mods = pygame.key.get_mods()
+        return 0.25 if (mods & pygame.KMOD_SHIFT) else 0.05
+
     def draw_settings(self, screen, big_font, font, mouse_pos):
         title = big_font.render("Налаштування", True, (230,230,230))
         screen.blit(title, title.get_rect(center=(self.winw//2, 90)))
+        hint = font.render("Підказка: утримуйте Shift для кроку 25%", True, (180, 180, 180))
+        screen.blit(hint, hint.get_rect(center=(self.winw//2, 120)))
 
         rects = self.settings_buttons()
         start_y = 170

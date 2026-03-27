@@ -19,14 +19,31 @@ def compute_adj_counts(state):
         for x in range(8):
             state.adj_counts[y][x] = count_adjacent(x,y,state.mines)
 
-def reveal_numbers_under_pieces(state):
+def add_temp_reveal(state, cells, duration_moves=2):
+    if not cells:
+        return
+    temp = getattr(state, "temp_reveal", None)
+    if not isinstance(temp, dict):
+        state.temp_reveal = {"cells": [], "remaining_moves": duration_moves}
+        temp = state.temp_reveal
+    existing = set(tuple(c) for c in temp.get("cells", []))
+    for x, y in cells:
+        existing.add((x, y))
+    temp["cells"] = [[x, y] for (x, y) in existing]
+    temp["remaining_moves"] = max(int(temp.get("remaining_moves", 0)), duration_moves)
+
+
+def reveal_numbers_under_pieces(state, duration_moves=2):
+    revealed = []
     for y in range(8):
         for x in range(8):
             piece = state.board.get_piece(x, y)
             if not piece:
                 continue
-            if state.mines[y][x] == 0 and state.adj_counts[y][x] > 0:
-                state.revealed[y][x] = 1
+            if state.mines[y][x] == 0 and state.adj_counts[y][x] > 0 and state.revealed[y][x] == 0:
+                revealed.append((x, y))
+    add_temp_reveal(state, revealed, duration_moves=duration_moves)
+    return revealed
 
 def clear_reveal_on_mine(state, x, y):
     state.revealed[y][x] = 0
@@ -44,7 +61,7 @@ def place_mine(state, x, y):
     state.mines[y][x] = 1
     clear_reveal_on_mine(state, x, y)
     compute_adj_counts(state)
-    reveal_numbers_under_pieces(state)
+    reveal_numbers_under_pieces(state, duration_moves=2)
     return True
 
 def spawn_mines(state, count=MINES_DEFAULT):
@@ -55,7 +72,7 @@ def spawn_mines(state, count=MINES_DEFAULT):
         state.mines[y][x] = 1
         clear_reveal_on_mine(state, x, y)
     compute_adj_counts(state)
-    reveal_numbers_under_pieces(state)
+    reveal_numbers_under_pieces(state, duration_moves=2)
     return sample
 
 def reveal_numbers(state):

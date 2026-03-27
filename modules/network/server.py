@@ -829,7 +829,7 @@ class Room:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
             self.consume_item(color, slot)
-            self.broadcast_popup(self.pack_title("minesweeper"), item.get("name"), "minesweeper")
+            self.send_popup_to_client(conn, self.pack_title("minesweeper"), item.get("name"), "minesweeper")
             self.broadcast_state()
             return
         if effect_id == "ms_item_reveal_explode":
@@ -843,7 +843,7 @@ class Room:
             trigger_mine(self.state, x, y)
             self.state.mine_vision[color] = 0
             self.consume_item(color, slot)
-            self.broadcast_popup(self.pack_title("minesweeper"), item.get("name"), "minesweeper")
+            self.send_popup_to_client(conn, self.pack_title("minesweeper"), item.get("name"), "minesweeper")
             winner, reason = check_royal_elimination(self.state)
             if winner:
                 self.broadcast_state()
@@ -880,7 +880,7 @@ class Room:
             if self.is_pack_active("minesweeper") and self.state.board.get_piece(tx, ty) is not None:
                 reveal_cell(self.state, tx, ty)
             self.consume_item(color, slot)
-            self.broadcast_popup(self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
             winner, reason = check_royal_elimination(self.state)
             if winner:
                 self.broadcast_state()
@@ -935,7 +935,7 @@ class Room:
                     break
                 cx, cy = nx, ny
             self.consume_item(color, slot)
-            self.broadcast_popup(self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
             if hit:
                 winner, reason = check_royal_elimination(self.state)
                 if winner:
@@ -964,7 +964,7 @@ class Room:
             nukes.append({"center": [sx, sy], "timer": 5})
             self.state.chessplus_nukes = nukes
             self.consume_item(color, slot)
-            self.broadcast_popup(self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
             self.broadcast_state()
             return
         if effect_id == "cp_item_clone":
@@ -999,7 +999,7 @@ class Room:
                 return
             self.state.chessplus_clones[self.pos_key(tx, ty)] = 3
             self.consume_item(color, slot)
-            self.broadcast_popup(self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
             self.broadcast_state()
             return
         send_json(conn, {"type":"error", "msg":"unknown_item"})
