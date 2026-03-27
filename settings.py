@@ -1,0 +1,34 @@
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 720
+
+BOARD_SIZE = 8
+TILE_SIZE = 64
+BOARD_MARGIN = 104
+
+SERVER_HOST = "0.0.0.0"
+SERVER_PORT = 9999
+
+MATCH_TIME_SECONDS = 600
+
+INTRO_DURATION = 8.0
+INTRO_VIDEO_FPS_FALLBACK = 60.0
+
+MOVE_COOLDOWN = 0.5
+EXPLOSION_FRAME_TIME = 0.06
+EXPLOSION_DELAY = 0.2
+CHAIN_REACTION_DELAY = 0.3
+
+FONT_MAIN_NAME = "IosevkaCharon"
+FONT_MAIN_FILE = "IosevkaCharon-BoldItalic.ttf"
+FONT_ACCENT_NAME = "Handjet-Medium"
+FONT_ACCENT_FILE = "Handjet-Medium.ttf"
+
+PIECE_VALUES = {
+    "pawn": 1,
+    "knight": 3,
+    "bishop": 3,
+    "rook": 5,
+    "queen": 9,
+    "king": 0,
+}
+ROYAL_TYPES = {"king", "queen"}

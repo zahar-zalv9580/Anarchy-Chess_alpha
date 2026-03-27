@@ -1,0 +1,1057 @@
+﻿import socket, threading, json, time, sys, random
+from pathlib import Path
+
+# Allow running this file directly without "python -m".
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+from modules.game.state import GameState
+from modules.game.rules import validate_move, apply_move
+from modules.dlc.minesweeper import reveal_cell, trigger_mine, place_mine
+from modules.dlc.chessplus import mutate_piece_randomly, clone_piece
+from modules.dlc.packs import (
+    PACK_DEFS,
+    build_pack_states,
+    activate_pack,
+    choose_effect,
+    make_item,
+    apply_effect,
+    get_pack_def,
+)
+import settings as cfg
+
+HOST = cfg.SERVER_HOST
+PORT = cfg.SERVER_PORT
+GAME_DATA_PATH = PROJECT_ROOT / "data" / "game.json"
+
+def load_game_id():
+    if not GAME_DATA_PATH.exists():
+        save_game_id(0)
+        return 0
+    try:
+        with GAME_DATA_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return int(data.get("game_id", 0))
+    except Exception:
+        return 0
+
+def save_game_id(game_id):
+    GAME_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with GAME_DATA_PATH.open("w", encoding="utf-8") as f:
+        json.dump({"game_id": game_id}, f, ensure_ascii=False, indent=2)
+
+def count_royals(state):
+    counts = {"white": 0, "black": 0}
+    for y in range(8):
+        for x in range(8):
+            p = state.board.get_piece(x, y)
+            if p and p.ptype in cfg.ROYAL_TYPES:
+                counts[p.color] += 1
+    return counts
+
+def material_score(state, color):
+    score = 0
+    for y in range(8):
+        for x in range(8):
+            p = state.board.get_piece(x, y)
+            if p and p.color == color:
+                score += cfg.PIECE_VALUES.get(p.ptype, 0)
+    return score
+
+def evaluate_timer_winner(state):
+    royals = count_royals(state)
+    if royals["white"] != royals["black"]:
+        winner = "white" if royals["white"] > royals["black"] else "black"
+        return winner, "timer_royal"
+    white_mat = material_score(state, "white")
+    black_mat = material_score(state, "black")
+    if white_mat != black_mat:
+        winner = "white" if white_mat > black_mat else "black"
+        return winner, "timer_material"
+    return random.choice(["white", "black"]), "timer_random"
+
+def check_royal_elimination(state):
+    royals = count_royals(state)
+    if royals["white"] == 0 and royals["black"] == 0:
+        return random.choice(["white", "black"]), "royal_both"
+    if royals["white"] == 0:
+        return "black", "royal_captured"
+    if royals["black"] == 0:
+        return "white", "royal_captured"
+    return None, None
+
+def send_json(conn, obj):
+    data = json.dumps(obj).encode('utf-8')
+    conn.sendall(len(data).to_bytes(4, 'big') + data)
+
+def recv_json(conn):
+    # receive 4-byte length then payload
+    length_bytes = conn.recv(4)
+    if not length_bytes:
+        return None
+    length = int.from_bytes(length_bytes, 'big')
+    data = b''
+    while len(data) < length:
+        chunk = conn.recv(length - len(data))
+        if not chunk:
+            return None
+        data += chunk
+    return json.loads(data.decode('utf-8'))
+
+class Room:
+    def __init__(self):
+        self.clients = []  # list of (conn, addr, name, color)
+        self.lock = threading.Lock()
+        self.state = GameState()
+        self.move_count = 0
+        self.running = False
+        self.match_start_time = None
+        self.timer_thread = None
+        self.enabled_pack_ids = [p.get("id") for p in PACK_DEFS]
+        self.pack_defs = [p for p in PACK_DEFS]
+        self.pack_def_by_id = {p.get("id"): p for p in self.pack_defs}
+        self.next_pack_activation = 5
+        self.next_pack_index = 0
+        self.state.dlc_packs = build_pack_states(self.pack_defs)
+        self.state.inventory = {"white": [None]*9, "black": [None]*9}
+
+    def broadcast_state(self):
+        self.update_timer_state()
+        payload = {"type":"state_update", "state": self.state.to_dict()}
+        with self.lock:
+            for c in self.clients:
+                try:
+                    send_json(c['conn'], payload)
+                except Exception as e:
+                    print("Broadcast error:", e)
+
+    def end_game(self, reason, winner=None):
+        payload = {"type":"game_over", "reason": reason}
+        if winner:
+            payload["winner"] = winner
+        with self.lock:
+            for c in self.clients:
+                try:
+                    send_json(c['conn'], payload)
+                except Exception:
+                    pass
+        self.running = False
+
+    def broadcast_popup(self, title, message=None, theme=None):
+        payload = {"type": "popup", "title": title, "message": message or ""}
+        if theme:
+            payload["theme"] = theme
+        with self.lock:
+            for c in self.clients:
+                try:
+                    send_json(c['conn'], payload)
+                except Exception:
+                    pass
+
+    def send_popup_to_client(self, conn, title, message=None, theme=None):
+        payload = {"type": "popup", "title": title, "message": message or ""}
+        if theme:
+            payload["theme"] = theme
+        try:
+            send_json(conn, payload)
+        except Exception:
+            pass
+
+    def start_game(self):
+        self.running = True
+        print("Game starting. Broadcasting initial state.")
+        self.broadcast_state()
+
+    def reset_game_state(self):
+        self.state = GameState()
+        self.state.setup_starting_position()
+        self.state.dlc_packs = build_pack_states(self.pack_defs)
+        self.state.inventory = {"white": [None]*9, "black": [None]*9}
+        self.move_count = 0
+        self.match_start_time = None
+        self.timer_thread = None
+        self.next_pack_activation = 5
+        self.next_pack_index = 0
+
+    def set_enabled_packs(self, pack_ids):
+        if not isinstance(pack_ids, list):
+            return
+        valid = [p.get("id") for p in PACK_DEFS]
+        selected = [pid for pid in pack_ids if pid in valid]
+        self.enabled_pack_ids = selected
+        self.pack_defs = [p for p in PACK_DEFS if p.get("id") in self.enabled_pack_ids]
+        self.pack_def_by_id = {p.get("id"): p for p in self.pack_defs}
+
+    def update_timer_state(self):
+        total_ms = int(cfg.MATCH_TIME_SECONDS * 1000)
+        if self.match_start_time is None:
+            remaining_ms = total_ms
+        else:
+            elapsed_ms = int((time.time() - self.match_start_time) * 1000)
+            remaining_ms = max(0, total_ms - elapsed_ms)
+        self.state.timer["match_ms"] = remaining_ms
+        self.state.timer["match_running"] = self.match_start_time is not None
+
+    def start_match_timer(self):
+        if self.match_start_time is not None:
+            return
+        self.match_start_time = time.time()
+        def timer_fn():
+            remaining = cfg.MATCH_TIME_SECONDS - (time.time() - self.match_start_time)
+            if remaining > 0:
+                time.sleep(remaining)
+            with self.lock:
+                if not self.running:
+                    return
+            winner, reason = evaluate_timer_winner(self.state)
+            self.broadcast_state()
+            self.end_game(reason, winner=winner)
+        self.timer_thread = threading.Thread(target=timer_fn, daemon=True)
+        self.timer_thread.start()
+
+    def handle_client(self, client):
+        conn = client['conn']
+        color = client['color']
+        try:
+            while self.running:
+                msg = recv_json(conn)
+                if msg is None:
+                    print(f"Клієнт {color} від'єднався.")
+                    break
+                mtype = msg.get('type')
+                if mtype == 'move':
+                    frm = tuple(msg.get('from',[]))
+                    to = tuple(msg.get('to',[]))
+                    if color != self.state.turn:
+                        send_json(conn, {"type":"error","msg":"not_your_turn"})
+                        continue
+
+                    ok, reason = validate_move(self.state, frm, to, color)
+                    if not ok:
+                        send_json(conn, {"type":"error","msg":reason or "illegal_move"})
+                        continue
+
+                    # apply move (basic legality)
+                    captured, promoted = apply_move(self.state, frm, to)
+                    # clear statuses on captured piece
+                    self.clear_positional(self.state.chessplus_mutations, to)
+                    self.clear_positional(self.state.chessplus_clones, to)
+                    self.clear_positional(self.state.chessplus_burning, to)
+                    # moving piece carries some statuses
+                    self.clear_positional(self.state.chessplus_burning, frm)
+                    self.move_positional(self.state.chessplus_mutations, frm, to)
+                    self.move_positional(self.state.chessplus_clones, frm, to)
+
+                    # update move_count
+                    self.move_count += 1
+                    self.state.move_count = self.move_count
+                    if self.move_count == 1:
+                        self.start_match_timer()
+                    self.advance_temporary_effects()
+                    full_move_completed = (self.move_count % 2 == 0)
+                    self.advance_chessplus_effects(full_move_completed)
+                    self.apply_chessplus_cell_effects(to[0], to[1])
+                    if self.is_pack_active("minesweeper") and self.state.board.get_piece(to[0], to[1]) is not None:
+                        reveal_cell(self.state, to[0], to[1])
+
+                    newly_activated = self.check_activate_packs()
+                    self.advance_pack_lifetimes(full_move_completed)
+                    self.advance_pack_effects(current_color=color, skip_pack_ids=newly_activated)
+                    winner, reason = check_royal_elimination(self.state)
+                    if winner:
+                        self.broadcast_state()
+                        self.end_game(reason, winner=winner)
+                        break
+                    # toggle turn after legal move
+                    self.state.turn = 'black' if self.state.turn == 'white' else 'white'
+                    # broadcast
+                    self.broadcast_state()
+                elif mtype == 'use_item_request':
+                    slot = msg.get('slot')
+                    self.handle_item_request(conn, color, slot)
+                elif mtype == 'use_item':
+                    slot = msg.get('slot')
+                    target = msg.get('target')
+                    self.handle_item_use(conn, color, slot, target)
+                elif mtype == 'use_item_target':
+                    slot = msg.get('slot')
+                    target = msg.get('target')
+                    self.handle_item_use(conn, color, slot, target)
+                elif mtype == 'join':
+                    # handled at connection time
+                    pass
+                elif mtype == 'left':
+                    print("Client sent left.")
+                    break
+        except Exception as e:
+            print("Client handler exception:", e)
+        finally:
+            # on disconnect -> end game, notify other
+            with self.lock:
+                # remove this client
+                self.clients = [c for c in self.clients if c['conn'] != conn]
+                if self.running:
+                    self.running = False
+                    for c in self.clients:
+                        try:
+                            send_json(c['conn'], {"type":"game_over","reason":"opponent_left"})
+                        except:
+                            pass
+                if len(self.clients) == 0:
+                    # reset room for a new game
+                    self.state = GameState()
+                    self.state.dlc_packs = build_pack_states(self.pack_defs)
+                    self.state.inventory = {"white": [None]*9, "black": [None]*9}
+                    self.move_count = 0
+                    self.match_start_time = None
+                    self.timer_thread = None
+                    self.next_pack_activation = 5
+                    self.next_pack_index = 0
+            conn.close()
+
+    def is_pack_active(self, pack_id):
+        for pack in self.state.dlc_packs:
+            if pack.get("id") == pack_id:
+                return bool(pack.get("active"))
+        return False
+
+    def check_activate_packs(self):
+        newly = []
+        if self.move_count % 2 != 0:
+            return newly
+        full_moves = self.move_count // 2
+        if not self.state.dlc_packs:
+            return newly
+        while full_moves >= self.next_pack_activation:
+            pack_state = None
+            pack_count = len(self.state.dlc_packs)
+            for offset in range(pack_count):
+                idx = (self.next_pack_index + offset) % pack_count
+                candidate = self.state.dlc_packs[idx]
+                if not candidate.get("active"):
+                    pack_state = candidate
+                    self.next_pack_index = (idx + 1) % pack_count
+                    break
+            if pack_state:
+                pack_def = self.pack_def_by_id.get(pack_state.get("id")) or get_pack_def(pack_state.get("id"))
+                if pack_def:
+                    activate_pack(pack_state, pack_def)
+                    newly.append(pack_state.get("id"))
+                    self.broadcast_popup(pack_state.get("name"), "Активація", pack_state.get("id"))
+            self.next_pack_activation += 5
+        return newly
+
+    def advance_pack_lifetimes(self, full_move_completed=False):
+        if not full_move_completed:
+            return
+        for pack_state in self.state.dlc_packs:
+            if not pack_state.get("active"):
+                continue
+            pack_state["active_moves"] = int(pack_state.get("active_moves", 0)) + 1
+            if pack_state["active_moves"] >= 10:
+                pack_state["active"] = False
+                pack_state["next_effect_in"] = None
+                self.broadcast_popup(pack_state.get("name"), "Деактивація", pack_state.get("id"))
+
+    def advance_pack_effects(self, current_color, skip_pack_ids=None):
+        if skip_pack_ids is None:
+            skip_pack_ids = set()
+        else:
+            skip_pack_ids = set(skip_pack_ids)
+        for pack_state in self.state.dlc_packs:
+            if not pack_state.get("active"):
+                continue
+            if pack_state.get("id") in skip_pack_ids:
+                continue
+            next_in = pack_state.get("next_effect_in")
+            if next_in is None:
+                continue
+            next_in -= 1
+            if next_in > 0:
+                pack_state["next_effect_in"] = next_in
+                continue
+            pack_def = self.pack_def_by_id.get(pack_state.get("id")) or get_pack_def(pack_state.get("id"))
+            if not pack_def:
+                pack_state["next_effect_in"] = random.randint(1, 2)
+                continue
+            eff_def, eff_state = choose_effect(pack_state, pack_def)
+            if not eff_def or not eff_state:
+                pack_state["next_effect_in"] = None
+                continue
+            eff_state["remaining"] = max(0, (eff_state.get("remaining") or 0) - 1)
+            pack_state["next_effect_in"] = random.randint(1, 2)
+
+            if eff_def.get("is_item"):
+                item = make_item(eff_def)
+                added, slot_idx = self.add_item_to_inventory(current_color, item)
+                if added:
+                    self.broadcast_popup(pack_state.get("name"), item["name"], pack_state.get("id"))
+                else:
+                    conn = self.get_conn_by_color(current_color)
+                    if conn:
+                        self.send_popup_to_client(conn, "Інвентар заповнений", "Предмет не додано")
+            else:
+                apply_effect(eff_def, self.state)
+                self.broadcast_popup(pack_state.get("name"), eff_def.get("name"), pack_state.get("id"))
+
+    def get_conn_by_color(self, color):
+        for c in self.clients:
+            if c.get("color") == color:
+                return c.get("conn")
+        return None
+
+    def pack_title(self, pack_id):
+        if not pack_id:
+            return ""
+        pack_def = self.pack_def_by_id.get(pack_id) or get_pack_def(pack_id)
+        if pack_def:
+            return pack_def.get("name", pack_id)
+        return pack_id
+
+    def add_item_to_inventory(self, color, item):
+        inv = self.state.inventory.get(color)
+        if inv is None:
+            return False, None
+        for i in range(len(inv)):
+            if inv[i] is None:
+                inv[i] = item
+                return True, i
+        return False, None
+
+    def choose_random_item_def(self):
+        items = []
+        for pack_def in self.pack_defs:
+            for eff in pack_def.get("effects", []):
+                if eff.get("is_item"):
+                    items.append(eff)
+        if not items:
+            return None
+        return random.choice(items)
+
+    def pos_key(self, x, y):
+        return f"{x},{y}"
+
+    def parse_key(self, key):
+        try:
+            sx, sy = key.split(",")
+            return int(sx), int(sy)
+        except Exception:
+            return None
+
+    def clear_positional(self, mapping, pos):
+        if mapping is None:
+            return
+        x, y = pos
+        k = self.pos_key(x, y)
+        if k in mapping:
+            del mapping[k]
+
+    def move_positional(self, mapping, fr, to):
+        if mapping is None:
+            return
+        kf = self.pos_key(fr[0], fr[1])
+        if kf in mapping:
+            kt = self.pos_key(to[0], to[1])
+            mapping[kt] = mapping.pop(kf)
+
+    def swap_positional(self, mapping, a, b):
+        if mapping is None:
+            return
+        ka = self.pos_key(a[0], a[1])
+        kb = self.pos_key(b[0], b[1])
+        va = mapping.get(ka)
+        vb = mapping.get(kb)
+        if va is not None:
+            mapping[kb] = va
+        else:
+            mapping.pop(kb, None)
+        if vb is not None:
+            mapping[ka] = vb
+        else:
+            mapping.pop(ka, None)
+
+    def remove_piece_at(self, x, y):
+        piece = self.state.board.get_piece(x, y)
+        if piece is None:
+            return False
+        if piece.is_royal:
+            if piece.color in self.state.royal_counts:
+                self.state.royal_counts[piece.color] -= 1
+        self.state.board.set_piece(x, y, None)
+        self.clear_positional(self.state.chessplus_mutations, (x, y))
+        self.clear_positional(self.state.chessplus_clones, (x, y))
+        self.clear_positional(self.state.chessplus_burning, (x, y))
+        return True
+
+    def get_cell_effect(self, x, y):
+        if not (0 <= x < 8 and 0 <= y < 8):
+            return None
+        return self.state.chessplus_cells[y][x]
+
+    def wall_between(self, fr, to):
+        walls = getattr(self.state, "chessplus_walls", [])
+        if not walls:
+            return False
+        ax, ay = fr
+        bx, by = to
+        for w in walls:
+            if len(w) == 4:
+                x1, y1, x2, y2 = w
+            elif len(w) == 2:
+                (x1, y1), (x2, y2) = w
+            else:
+                continue
+            if (x1, y1) == (ax, ay) and (x2, y2) == (bx, by):
+                return True
+            if (x2, y2) == (ax, ay) and (x1, y1) == (bx, by):
+                return True
+        return False
+
+    def set_cell_effect(self, x, y, effect_id):
+        if not (0 <= x < 8 and 0 <= y < 8):
+            return
+        self.state.chessplus_cells[y][x] = effect_id
+
+    def clear_cell_effect(self, x, y):
+        if not (0 <= x < 8 and 0 <= y < 8):
+            return
+        self.state.chessplus_cells[y][x] = None
+
+    def advance_temporary_effects(self):
+        temp = getattr(self.state, "temp_reveal", None)
+        if temp and temp.get("remaining_moves", 0) > 0:
+            temp["remaining_moves"] = max(0, int(temp.get("remaining_moves", 0)) - 1)
+            if temp["remaining_moves"] == 0:
+                temp["cells"] = []
+        vision = getattr(self.state, "mine_vision", None)
+        if vision:
+            for color in ("white", "black"):
+                if vision.get(color, 0) > 0:
+                    vision[color] = max(0, int(vision.get(color, 0)) - 1)
+
+    def iter_pos_map(self, mapping):
+        if not mapping:
+            return []
+        items = []
+        for k, v in mapping.items():
+            pos = self.parse_key(k)
+            if pos:
+                items.append((pos, v))
+        return items
+
+    def apply_chessplus_cell_effects(self, x, y):
+        effect = self.get_cell_effect(x, y)
+        if not effect:
+            return
+        if effect == "void":
+            self.remove_piece_at(x, y)
+            void_state = getattr(self.state, "chessplus_void", None)
+            if void_state is not None:
+                void_state["next_expand"] = max(int(void_state.get("next_expand", 0)), 2)
+            return
+        if effect == "dice":
+            piece = self.state.board.get_piece(x, y)
+            if not piece:
+                return
+            roll = random.random()
+            if roll < 0.2:
+                self.remove_piece_at(x, y)
+                self.broadcast_popup(self.pack_title("chessplus"), "Кубик", "chessplus")
+            elif roll < 0.4:
+                item_def = self.choose_random_item_def()
+                if item_def:
+                    item = make_item(item_def)
+                    added, slot_idx = self.add_item_to_inventory(piece.color, item)
+                    if added:
+                        self.broadcast_popup(self.pack_title("chessplus"), item["name"], "chessplus")
+                    else:
+                        conn = self.get_conn_by_color(piece.color)
+                        if conn:
+                            self.send_popup_to_client(conn, "Інвентар заповнений", "Предмет не додано")
+            else:
+                mutate_piece_randomly(self.state, x, y)
+            self.clear_positional(self.state.chessplus_mutations, (x, y))
+            return
+        if effect == "fire":
+            self.state.chessplus_burning[self.pos_key(x, y)] = 2
+            return
+        if effect == "bomb":
+            k = self.pos_key(x, y)
+            current = int(self.state.chessplus_bombs.get(k, 0)) if self.state.chessplus_bombs else 0
+            self.state.chessplus_bombs[k] = max(current, 1)
+            return
+        if effect == "swap":
+            self.trigger_swap()
+            self.clear_cell_effect(x, y)
+            return
+        if effect == "toxic":
+            self.apply_toxic(x, y)
+            return
+
+    def apply_toxic(self, x, y):
+        if random.random() < 0.5:
+            self.remove_piece_at(x, y)
+        else:
+            mutate_piece_randomly(self.state, x, y)
+
+    def trigger_swap(self):
+        pieces = [(x, y) for y in range(8) for x in range(8) if self.state.board.get_piece(x, y)]
+        if len(pieces) < 2:
+            return False
+        a, b = random.sample(pieces, 2)
+        pa = self.state.board.get_piece(*a)
+        pb = self.state.board.get_piece(*b)
+        self.state.board.set_piece(a[0], a[1], pb)
+        self.state.board.set_piece(b[0], b[1], pa)
+        self.swap_positional(self.state.chessplus_mutations, a, b)
+        self.swap_positional(self.state.chessplus_clones, a, b)
+        # burning depends on standing on fire tiles, reset for swapped cells
+        self.clear_positional(self.state.chessplus_burning, a)
+        self.clear_positional(self.state.chessplus_burning, b)
+        if self.get_cell_effect(a[0], a[1]) == "fire" and self.state.board.get_piece(*a):
+            self.state.chessplus_burning[self.pos_key(a[0], a[1])] = 2
+        if self.get_cell_effect(b[0], b[1]) == "fire" and self.state.board.get_piece(*b):
+            self.state.chessplus_burning[self.pos_key(b[0], b[1])] = 2
+        return True
+
+    def explode_area(self, cx, cy, radius=1):
+        for x in range(cx - radius, cx + radius + 1):
+            for y in range(cy - radius, cy + radius + 1):
+                if 0 <= x < 8 and 0 <= y < 8:
+                    self.remove_piece_at(x, y)
+
+    def detonate_bomb_chain(self, start_positions):
+        queue = list(start_positions)
+        seen = set()
+        while queue:
+            cx, cy = queue.pop(0)
+            if (cx, cy) in seen:
+                continue
+            seen.add((cx, cy))
+            # remove bomb marker
+            self.state.chessplus_bombs.pop(self.pos_key(cx, cy), None)
+            if self.get_cell_effect(cx, cy) == "bomb":
+                self.clear_cell_effect(cx, cy)
+            # explosion
+            self.explode_area(cx, cy, radius=1)
+            self.state.craters.add((cx, cy))
+            # chain mines
+            for x in range(cx - 1, cx + 2):
+                for y in range(cy - 1, cy + 2):
+                    if 0 <= x < 8 and 0 <= y < 8:
+                        if self.state.mines[y][x] == 1:
+                            trigger_mine(self.state, x, y)
+            # chain bombs
+            for x in range(cx - 1, cx + 2):
+                for y in range(cy - 1, cy + 2):
+                    if 0 <= x < 8 and 0 <= y < 8:
+                        if self.get_cell_effect(x, y) == "bomb" and (x, y) not in seen:
+                            queue.append((x, y))
+
+    def trigger_nuke(self, center):
+        cx, cy = center
+        radius = 2
+        for x in range(cx - radius, cx + radius + 1):
+            for y in range(cy - radius, cy + radius + 1):
+                if 0 <= x < 8 and 0 <= y < 8:
+                    self.remove_piece_at(x, y)
+        # main crater + extra for visual weight
+        self.state.craters.add((cx, cy))
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            nx, ny = cx + dx, cy + dy
+            if 0 <= nx < 8 and 0 <= ny < 8:
+                self.state.craters.add((nx, ny))
+        # chain mines & bombs
+        for x in range(cx - radius, cx + radius + 1):
+            for y in range(cy - radius, cy + radius + 1):
+                if 0 <= x < 8 and 0 <= y < 8:
+                    if self.state.mines[y][x] == 1:
+                        trigger_mine(self.state, x, y)
+                    if self.pos_key(x, y) in self.state.chessplus_bombs:
+                        self.state.chessplus_bombs.pop(self.pos_key(x, y), None)
+                    if self.get_cell_effect(x, y) == "bomb":
+                        self.clear_cell_effect(x, y)
+        # toxic fallout
+        for x in range(cx - radius, cx + radius + 1):
+            for y in range(cy - radius, cy + radius + 1):
+                if 0 <= x < 8 and 0 <= y < 8:
+                    if self.get_cell_effect(x, y) == "void":
+                        continue
+                    if random.random() < 0.5:
+                        self.set_cell_effect(x, y, "toxic")
+
+    def advance_chessplus_effects(self, full_move_completed=False):
+        # fire spread / extinguish (every move)
+        fire_cells = [(x, y) for y in range(8) for x in range(8) if self.get_cell_effect(x, y) == "fire"]
+        new_fire = []
+        remove_fire = []
+        for x, y in fire_cells:
+            if random.random() < 0.3:
+                remove_fire.append((x, y))
+            if random.random() < 0.5:
+                neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+                candidates = [(nx, ny) for (nx, ny) in neighbors if 0 <= nx < 8 and 0 <= ny < 8 and self.get_cell_effect(nx, ny) is None]
+                if candidates:
+                    new_fire.append(random.choice(candidates))
+        for x, y in remove_fire:
+            if self.get_cell_effect(x, y) == "fire":
+                self.clear_cell_effect(x, y)
+        for x, y in new_fire:
+            if self.get_cell_effect(x, y) is None:
+                self.set_cell_effect(x, y, "fire")
+
+        if not full_move_completed:
+            return
+
+        # burning damage
+        for (pos, remaining) in list(self.iter_pos_map(self.state.chessplus_burning)):
+            x, y = pos
+            if self.state.board.get_piece(x, y) is None or self.get_cell_effect(x, y) != "fire":
+                self.clear_positional(self.state.chessplus_burning, (x, y))
+                continue
+            remaining = int(remaining) - 1
+            if remaining <= 0:
+                self.remove_piece_at(x, y)
+                self.clear_positional(self.state.chessplus_burning, (x, y))
+            else:
+                self.state.chessplus_burning[self.pos_key(x, y)] = remaining
+
+        # bomb timers
+        for (pos, remaining) in list(self.iter_pos_map(self.state.chessplus_bombs)):
+            x, y = pos
+            remaining = int(remaining) - 1
+            if remaining <= 0:
+                self.state.chessplus_bombs.pop(self.pos_key(x, y), None)
+                self.detonate_bomb_chain([(x, y)])
+            else:
+                self.state.chessplus_bombs[self.pos_key(x, y)] = remaining
+
+        # void expansion
+        void_state = getattr(self.state, "chessplus_void", None)
+        if void_state and void_state.get("cells"):
+            next_expand = int(void_state.get("next_expand", 0))
+            if next_expand <= 0:
+                cells = [tuple(c) for c in void_state.get("cells", [])]
+                neighbors = set()
+                for vx, vy in cells:
+                    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        nx, ny = vx + dx, vy + dy
+                        if 0 <= nx < 8 and 0 <= ny < 8 and (nx, ny) not in cells:
+                            neighbors.add((nx, ny))
+                if neighbors:
+                    nx, ny = random.choice(list(neighbors))
+                    self.set_cell_effect(nx, ny, "void")
+                    void_state["cells"].append([nx, ny])
+                    self.remove_piece_at(nx, ny)
+                void_state["next_expand"] = random.randint(1, 2)
+            else:
+                void_state["next_expand"] = max(0, next_expand - 1)
+
+        # clone TTL
+        for (pos, remaining) in list(self.iter_pos_map(self.state.chessplus_clones)):
+            x, y = pos
+            remaining = int(remaining) - 1
+            if remaining <= 0:
+                self.remove_piece_at(x, y)
+                self.clear_positional(self.state.chessplus_clones, (x, y))
+            else:
+                self.state.chessplus_clones[self.pos_key(x, y)] = remaining
+
+        # nukes
+        nukes = getattr(self.state, "chessplus_nukes", [])
+        remaining_nukes = []
+        for entry in nukes:
+            timer = int(entry.get("timer", 0)) - 1
+            if timer <= 0:
+                center = entry.get("center")
+                if center and len(center) == 2:
+                    self.trigger_nuke((center[0], center[1]))
+                    self.state.nuke_event_id = int(getattr(self.state, "nuke_event_id", 0)) + 1
+            else:
+                entry["timer"] = timer
+                remaining_nukes.append(entry)
+        self.state.chessplus_nukes = remaining_nukes
+
+    def get_inventory_item(self, color, slot):
+        inv = self.state.inventory.get(color)
+        if inv is None:
+            return None
+        if slot is None or not isinstance(slot, int):
+            return None
+        if slot < 0 or slot >= len(inv):
+            return None
+        return inv[slot]
+
+    def consume_item(self, color, slot):
+        inv = self.state.inventory.get(color)
+        if inv is None:
+            return
+        item = inv[slot]
+        if not item:
+            return
+        item["uses"] = max(0, int(item.get("uses", 1)) - 1)
+        if item["uses"] <= 0:
+            inv[slot] = None
+
+    def handle_item_request(self, conn, color, slot):
+        if color != self.state.turn:
+            send_json(conn, {"type":"error", "msg":"not_your_turn"})
+            return
+        item = self.get_inventory_item(color, slot)
+        if not item:
+            send_json(conn, {"type":"error", "msg":"item_missing"})
+            return
+        if item.get("target") != "mine":
+            return
+        targets = [(x, y) for y in range(8) for x in range(8) if self.state.mines[y][x] == 1]
+        if not targets:
+            send_json(conn, {"type":"error", "msg":"invalid_target"})
+            return
+        self.state.mine_vision[color] = 2
+        self.broadcast_state()
+        send_json(conn, {"type":"item_target", "slot": slot, "targets": targets, "mode": "mine"})
+
+    def handle_item_use(self, conn, color, slot, target):
+        if color != self.state.turn:
+            send_json(conn, {"type":"error", "msg":"not_your_turn"})
+            return
+        item = self.get_inventory_item(color, slot)
+        if not item:
+            send_json(conn, {"type":"error", "msg":"item_missing"})
+            return
+        effect_id = item.get("effect_id")
+        if effect_id == "ms_item_place_mine":
+            if not target or len(target) != 2:
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            x, y = target
+            if not place_mine(self.state, x, y):
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            self.consume_item(color, slot)
+            self.broadcast_popup(self.pack_title("minesweeper"), item.get("name"), "minesweeper")
+            self.broadcast_state()
+            return
+        if effect_id == "ms_item_reveal_explode":
+            if not target or len(target) != 2:
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            x, y = target
+            if not (0 <= x < 8 and 0 <= y < 8) or self.state.mines[y][x] != 1:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            trigger_mine(self.state, x, y)
+            self.state.mine_vision[color] = 0
+            self.consume_item(color, slot)
+            self.broadcast_popup(self.pack_title("minesweeper"), item.get("name"), "minesweeper")
+            winner, reason = check_royal_elimination(self.state)
+            if winner:
+                self.broadcast_state()
+                self.end_game(reason, winner=winner)
+                return
+            self.broadcast_state()
+            return
+        if effect_id == "cp_item_teleport":
+            if not isinstance(target, dict):
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            src = target.get("from")
+            dst = target.get("to")
+            if not src or not dst or len(src) != 2 or len(dst) != 2:
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            sx, sy = src
+            tx, ty = dst
+            if not (0 <= sx < 8 and 0 <= sy < 8 and 0 <= tx < 8 and 0 <= ty < 8):
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            piece = self.state.board.get_piece(sx, sy)
+            if not piece or piece.color != color:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            if self.state.board.get_piece(tx, ty) is not None:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            self.clear_positional(self.state.chessplus_burning, (sx, sy))
+            self.move_positional(self.state.chessplus_mutations, (sx, sy), (tx, ty))
+            self.move_positional(self.state.chessplus_clones, (sx, sy), (tx, ty))
+            self.state.board.move_piece((sx, sy), (tx, ty))
+            self.apply_chessplus_cell_effects(tx, ty)
+            if self.is_pack_active("minesweeper") and self.state.board.get_piece(tx, ty) is not None:
+                reveal_cell(self.state, tx, ty)
+            self.consume_item(color, slot)
+            self.broadcast_popup(self.pack_title("chessplus"), item.get("name"), "chessplus")
+            winner, reason = check_royal_elimination(self.state)
+            if winner:
+                self.broadcast_state()
+                self.end_game(reason, winner=winner)
+                return
+            self.broadcast_state()
+            return
+        if effect_id == "cp_item_pistol":
+            if not isinstance(target, dict):
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            src = target.get("from")
+            dst = target.get("to")
+            if not src or not dst or len(src) != 2 or len(dst) != 2:
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            sx, sy = src
+            tx, ty = dst
+            if not (0 <= sx < 8 and 0 <= sy < 8 and 0 <= tx < 8 and 0 <= ty < 8):
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            piece = self.state.board.get_piece(sx, sy)
+            if not piece or piece.color != color:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            dx = tx - sx
+            dy = ty - sy
+            if dx == 0 and dy == 0:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            if not (dx == 0 or dy == 0 or abs(dx) == abs(dy)):
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            dist = max(abs(dx), abs(dy))
+            if dist > 3:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            step_x = (dx > 0) - (dx < 0)
+            step_y = (dy > 0) - (dy < 0)
+            hit = False
+            cx, cy = sx, sy
+            for _ in range(3):
+                nx, ny = cx + step_x, cy + step_y
+                if not (0 <= nx < 8 and 0 <= ny < 8):
+                    break
+                if self.wall_between((cx, cy), (nx, ny)):
+                    break
+                target_piece = self.state.board.get_piece(nx, ny)
+                if target_piece:
+                    self.remove_piece_at(nx, ny)
+                    hit = True
+                    break
+                cx, cy = nx, ny
+            self.consume_item(color, slot)
+            self.broadcast_popup(self.pack_title("chessplus"), item.get("name"), "chessplus")
+            if hit:
+                winner, reason = check_royal_elimination(self.state)
+                if winner:
+                    self.broadcast_state()
+                    self.end_game(reason, winner=winner)
+                    return
+            self.broadcast_state()
+            return
+        if effect_id == "cp_item_nuke":
+            if not isinstance(target, dict):
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            src = target.get("from") or target.get("piece")
+            if not src or len(src) != 2:
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            sx, sy = src
+            if not (0 <= sx < 8 and 0 <= sy < 8):
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            piece = self.state.board.get_piece(sx, sy)
+            if not piece or piece.color != color:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            nukes = getattr(self.state, "chessplus_nukes", [])
+            nukes.append({"center": [sx, sy], "timer": 5})
+            self.state.chessplus_nukes = nukes
+            self.consume_item(color, slot)
+            self.broadcast_popup(self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.broadcast_state()
+            return
+        if effect_id == "cp_item_clone":
+            if not isinstance(target, dict):
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            src = target.get("from")
+            dst = target.get("to")
+            if not src or not dst or len(src) != 2 or len(dst) != 2:
+                send_json(conn, {"type":"error", "msg":"item_requires_target"})
+                return
+            sx, sy = src
+            tx, ty = dst
+            if not (0 <= sx < 8 and 0 <= sy < 8 and 0 <= tx < 8 and 0 <= ty < 8):
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            if max(abs(tx - sx), abs(ty - sy)) != 1:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            piece = self.state.board.get_piece(sx, sy)
+            if not piece or piece.color != color:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            if self.state.board.get_piece(tx, ty) is not None:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            if self.get_cell_effect(tx, ty) is not None:
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            if not clone_piece(self.state, (sx, sy), (tx, ty)):
+                send_json(conn, {"type":"error", "msg":"invalid_target"})
+                return
+            self.state.chessplus_clones[self.pos_key(tx, ty)] = 3
+            self.consume_item(color, slot)
+            self.broadcast_popup(self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.broadcast_state()
+            return
+        send_json(conn, {"type":"error", "msg":"unknown_item"})
+
+def serve():
+    print("Starting server on", HOST, PORT)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((HOST, PORT))
+    s.listen(2)
+    room = Room()
+    while True:
+        conn, addr = s.accept()
+        print("Incoming connection from", addr)
+        # handshake: receive join
+        msg = recv_json(conn)
+        if msg is None or msg.get('type') != 'join':
+            conn.close()
+            continue
+        name = msg.get('name','Player')
+        pack_ids = msg.get('packs')
+        start_game = False
+        clients_snapshot = None
+        with room.lock:
+            if len(room.clients) >= 2:
+                send_json(conn, {"type":"error","msg":"room_full"})
+                conn.close()
+                continue
+            if len(room.clients) == 0 and pack_ids is not None:
+                room.set_enabled_packs(pack_ids)
+            color = 'white' if len(room.clients) == 0 else 'black'
+            client = {'conn': conn, 'addr': addr, 'name': name, 'color': color}
+            room.clients.append(client)
+            send_json(conn, {"type":"join_ack","color": color})
+            print(f"Assigned {name=} as {color}")
+            if len(room.clients) == 2:
+                # initialize board pieces & game state
+                room.reset_game_state()
+                for c in room.clients:
+                    room.state.players[c['color']] = c.get('name')
+                next_id = load_game_id() + 1
+                save_game_id(next_id)
+                room.state.game_id = next_id
+                start_game = True
+                clients_snapshot = list(room.clients)
+        if start_game:
+            room.start_game()
+            # spin client threads
+            for c in clients_snapshot:
+                t = threading.Thread(target=room.handle_client, args=(c,), daemon=True)
+                t.start()
+        # continue accepting (but only one room in this simple server)
+
+if __name__ == '__main__':
+    serve()
+
