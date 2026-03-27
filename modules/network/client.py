@@ -392,7 +392,7 @@ class Client:
         pygame.init()
         self.init_audio()
         screen = pygame.display.set_mode((self.winw, self.winh))
-        pygame.display.set_caption("Anarchy Chess альфа версія")
+        pygame.display.set_caption("Anarchy Chess a-b 0.1")
         self.load_explosion_frames()
         self.load_mine_image()
         self.prepare_intro()
