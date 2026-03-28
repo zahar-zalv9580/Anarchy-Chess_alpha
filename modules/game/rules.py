@@ -142,6 +142,8 @@ def apply_move(state, fr, to):
         if to[1] == promotion_rank:
             piece.ptype = "queen"
             piece.is_royal = True
+            if piece.color in state.royal_counts:
+                state.royal_counts[piece.color] += 1
             promotion = True
 
     return captured, promotion

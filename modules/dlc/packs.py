@@ -273,42 +273,83 @@ def apply_effect(effect_def, state):
     effect_id = effect_def["id"]
     if effect_id == "ms_spawn_mine":
         coords = spawn_mines(state, count=1)
-        return f"Додано міну ({len(coords)})"
+        return {
+            "message": f"Додано міну ({len(coords)})",
+            "event": {"name": "SpawnMine", "etype": "tile", "target": coords, "extra": f"count:{len(coords)}"},
+        }
     if effect_id == "ms_spawn_mines":
         count = random.randint(2, 5)
         coords = spawn_mines(state, count=count)
-        return f"Додано мін: {len(coords)}"
+        return {
+            "message": f"Додано мін: {len(coords)}",
+            "event": {"name": "SpawnMines", "etype": "tile", "target": coords, "extra": f"count:{len(coords)}"},
+        }
     if effect_id == "ms_reveal_numbers":
         sample = temp_reveal_numbers(state, percent=0.5, duration_moves=2)
-        return f"Показано чисел: {len(sample)}"
+        return {
+            "message": f"Показано чисел: {len(sample)}",
+            "event": {"name": "RevealNumbers", "etype": "board", "target": sample, "extra": f"count:{len(sample)}"},
+        }
     if effect_id == "ms_explode_random":
         mines = [(x, y) for y in range(8) for x in range(8) if state.mines[y][x] == 1]
         if not mines:
-            return "Мін нема"
+            return {
+                "message": "Мін нема",
+                "event": {"name": "Explosion", "etype": "tile", "target": None, "extra": "no_mines"},
+            }
         x, y = random.choice(mines)
         trigger_mine(state, x, y)
-        return "Випадкова міна підірвана"
+        return {
+            "message": "Випадкова міна підірвана",
+            "event": {"name": "Explosion", "etype": "tile", "target": [x, y], "extra": "random"},
+        }
 
     if effect_id == "cp_dice_tile":
         coords = spawn_cells(state, "dice", count=1)
-        return f"Додано кубик: {len(coords)}"
+        return {
+            "message": f"Додано кубик: {len(coords)}",
+            "event": {"name": "DiceTile", "etype": "tile", "target": coords, "extra": f"count:{len(coords)}"},
+        }
     if effect_id == "cp_fire_tile":
         coords = spawn_cells(state, "fire", count=1)
-        return f"Додано вогонь: {len(coords)}"
+        return {
+            "message": f"Додано вогонь: {len(coords)}",
+            "event": {"name": "FireTile", "etype": "tile", "target": coords, "extra": f"count:{len(coords)}"},
+        }
     if effect_id == "cp_void":
         coords = spawn_void(state)
-        return "Безодня активована" if coords else "Безодня вже активна"
+        extra = "spawn" if coords else "active"
+        return {
+            "message": "Безодня активована" if coords else "Безодня вже активна",
+            "event": {"name": "Void", "etype": "tile", "target": coords, "extra": extra},
+        }
     if effect_id == "cp_bomb_tile":
         coords = spawn_cells(state, "bomb", count=1)
-        return f"Додано бомбу: {len(coords)}"
+        return {
+            "message": f"Додано бомбу: {len(coords)}",
+            "event": {"name": "BombTile", "etype": "tile", "target": coords, "extra": f"count:{len(coords)}"},
+        }
     if effect_id == "cp_swap_tile":
         coords = spawn_cells(state, "swap", count=1)
-        return f"Додано swap: {len(coords)}"
+        return {
+            "message": f"Додано swap: {len(coords)}",
+            "event": {"name": "SwapTile", "etype": "tile", "target": coords, "extra": f"count:{len(coords)}"},
+        }
     if effect_id == "cp_wall":
         wall = spawn_wall(state)
-        return "Стіна встановлена" if wall else "Стіни недоступні"
+        wall_target = None
+        if wall and len(wall) == 4:
+            x1, y1, x2, y2 = wall
+            wall_target = [[x1, y1], [x2, y2]]
+        return {
+            "message": "Стіна встановлена" if wall else "Стіни недоступні",
+            "event": {"name": "Wall", "etype": "board", "target": wall_target, "extra": "spawn" if wall else "none"},
+        }
     if effect_id == "cp_pawn_mutation":
         muts = apply_pawn_mutations(state, count=2)
-        return f"Мутації пішаків: {len(muts)}"
+        return {
+            "message": f"Мутації пішаків: {len(muts)}",
+            "event": {"name": "PawnMutation", "etype": "piece", "target": muts, "extra": f"count:{len(muts)}"},
+        }
 
     return None

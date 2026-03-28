@@ -23,6 +23,7 @@ import settings as cfg
 HOST = cfg.SERVER_HOST
 PORT = cfg.SERVER_PORT
 GAME_DATA_PATH = PROJECT_ROOT / "data" / "game.json"
+MATCH_LOG_DIR = PROJECT_ROOT / "data" / "match_logs"
 
 def load_game_id():
     if not GAME_DATA_PATH.exists():
@@ -114,6 +115,191 @@ class Room:
         self.next_pack_index = 0
         self.state.dlc_packs = build_pack_states(self.pack_defs)
         self.state.inventory = {"white": [None]*9, "black": [None]*9}
+        self.log_lock = threading.Lock()
+        self.match_log = None
+        self.log_path = None
+        self.active_move_no = None
+        self.active_move_info = None
+        self.pending_log_entries = []
+        self.pending_pack_events = []
+        self.pending_event_summaries = []
+
+    def coord_to_alg(self, pos):
+        if pos is None:
+            return "??"
+        x, y = pos
+        if not (0 <= x < 8 and 0 <= y < 8):
+            return f"{x},{y}"
+        return f"{chr(ord('a') + x)}{y + 1}"
+
+    def piece_short(self, piece):
+        if piece is None:
+            return "??"
+        letters = {
+            "pawn": "P",
+            "knight": "N",
+            "bishop": "B",
+            "rook": "R",
+            "queen": "Q",
+            "king": "K",
+        }
+        return f"{piece.color[0]}{letters.get(piece.ptype, piece.ptype[:1].upper())}"
+
+    def piece_ref(self, pos, piece=None):
+        if piece is None and pos is not None:
+            piece = self.state.board.get_piece(pos[0], pos[1])
+        if piece is None:
+            return self.coord_to_alg(pos)
+        return f"{self.piece_short(piece)}@{self.coord_to_alg(pos)}"
+
+    def init_match_log(self):
+        MATCH_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        game_id = int(self.state.game_id or 0)
+        self.log_path = MATCH_LOG_DIR / f"game_{game_id}.json"
+        self.match_log = {
+            "game_id": game_id,
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "players": dict(self.state.players),
+            "events": [],
+        }
+        self.write_log()
+
+    def write_log(self):
+        if self.match_log is None or self.log_path is None:
+            return
+        with self.log_lock:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("w", encoding="utf-8") as f:
+                json.dump(self.match_log, f, ensure_ascii=False, indent=2)
+
+    def append_log(self, entry):
+        if self.match_log is None:
+            return
+        entry = self.repair_strings(dict(entry))
+        entry.setdefault("ts", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        if self.active_move_no is not None:
+            entry.setdefault("move", self.active_move_no)
+        self.match_log["events"].append(entry)
+        self.write_log()
+
+    def fix_mojibake(self, value):
+        if not isinstance(value, str):
+            return value
+        try:
+            repaired = value.encode("cp1251").decode("utf-8")
+        except Exception:
+            return value
+        if "\ufffd" in repaired:
+            return value
+        return repaired if repaired != value else value
+
+    def repair_strings(self, obj):
+        if isinstance(obj, dict):
+            return {k: self.repair_strings(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self.repair_strings(v) for v in obj]
+        if isinstance(obj, str):
+            return self.fix_mojibake(obj)
+        return obj
+
+    def queue_log_entry(self, entry):
+        if self.active_move_no is None:
+            self.append_log(entry)
+        else:
+            self.pending_log_entries.append(entry)
+
+    def begin_move_log(self, move_no, piece, frm, to):
+        self.active_move_no = move_no
+        self.active_move_info = {"piece": piece, "from": frm, "to": to}
+        self.pending_log_entries = []
+        self.pending_pack_events = []
+        self.pending_event_summaries = []
+
+    def finalize_move_log(self):
+        if self.active_move_no is None or not self.active_move_info:
+            return
+        piece = self.active_move_info.get("piece")
+        frm = self.active_move_info.get("from")
+        to = self.active_move_info.get("to")
+        pack_info = "; ".join(self.pending_pack_events) if self.pending_pack_events else "ні"
+        event_info = ", ".join(self.pending_event_summaries) if self.pending_event_summaries else "—"
+        move_text = (
+            f"[Move] №{self.active_move_no} {self.piece_short(piece)} "
+            f"{self.coord_to_alg(frm)} -> {self.coord_to_alg(to)}; "
+            f"pack/effect: {pack_info}; events: {event_info}"
+        )
+        self.append_log({
+            "type": "move",
+            "text": move_text,
+            "piece": self.piece_short(piece),
+            "from": list(frm),
+            "to": list(to),
+            "pack_effects": list(self.pending_pack_events),
+            "events": list(self.pending_event_summaries),
+        })
+        for entry in self.pending_log_entries:
+            self.append_log(entry)
+        self.active_move_no = None
+        self.active_move_info = None
+        self.pending_log_entries = []
+        self.pending_pack_events = []
+        self.pending_event_summaries = []
+
+    def note_pack_event(self, pack_name, action, pack_id=None, effect_id=None):
+        if not pack_name and pack_id:
+            pack_name = self.pack_title(pack_id)
+        label = f"{pack_name}: {action}" if pack_name else action
+        if self.active_move_no is not None:
+            self.pending_pack_events.append(label)
+        entry = {
+            "type": "pack",
+            "pack": pack_name,
+            "pack_id": pack_id,
+            "action": action,
+            "effect_id": effect_id,
+            "text": label,
+        }
+        self.queue_log_entry(entry)
+
+    def log_event(self, name, etype, target=None, extra=None):
+        summary = f"{name} ({etype}"
+        if target:
+            summary += f" {target}"
+        if extra:
+            summary += f" {extra}"
+        summary += ")"
+        if self.active_move_no is not None:
+            self.pending_event_summaries.append(summary)
+        entry = {
+            "type": "event",
+            "name": name,
+            "event_type": etype,
+            "target": target,
+            "extra": extra,
+            "text": summary,
+        }
+        self.queue_log_entry(entry)
+
+    def maybe_promote_pawn_at(self, x, y, reason=None):
+        piece = self.state.board.get_piece(x, y)
+        if not piece or piece.ptype != "pawn":
+            return False
+        promotion_rank = 7 if piece.color == "white" else 0
+        if y != promotion_rank:
+            return False
+        piece.ptype = "queen"
+        if not piece.is_royal:
+            piece.is_royal = True
+            if piece.color in self.state.royal_counts:
+                self.state.royal_counts[piece.color] += 1
+        if reason:
+            self.log_event("Promotion", "piece", self.piece_ref((x, y), piece), extra=reason)
+        return True
+
+    def trigger_mine_event(self, x, y, source=None):
+        extra = source or "mine"
+        self.log_event("Explosion", "tile", self.coord_to_alg((x, y)), extra=extra)
+        trigger_mine(self.state, x, y)
 
     def broadcast_state(self):
         self.update_timer_state()
@@ -126,6 +312,12 @@ class Room:
                     print("Broadcast error:", e)
 
     def end_game(self, reason, winner=None):
+        self.append_log({
+            "type": "game_over",
+            "reason": reason,
+            "winner": winner,
+            "text": f"Game over: {reason}" + (f" ({winner})" if winner else ""),
+        })
         payload = {"type":"game_over", "reason": reason}
         if winner:
             payload["winner"] = winner
@@ -160,6 +352,12 @@ class Room:
     def start_game(self):
         self.running = True
         print("Game starting. Broadcasting initial state.")
+        self.init_match_log()
+        self.append_log({
+            "type": "game_start",
+            "text": "Game started",
+            "players": dict(self.state.players),
+        })
         self.broadcast_state()
 
     def reset_game_state(self):
@@ -172,6 +370,13 @@ class Room:
         self.timer_thread = None
         self.next_pack_activation = 5
         self.next_pack_index = 0
+        self.match_log = None
+        self.log_path = None
+        self.active_move_no = None
+        self.active_move_info = None
+        self.pending_log_entries = []
+        self.pending_pack_events = []
+        self.pending_event_summaries = []
 
     def set_enabled_packs(self, pack_ids):
         if not isinstance(pack_ids, list):
@@ -231,6 +436,8 @@ class Room:
                         send_json(conn, {"type":"error","msg":reason or "illegal_move"})
                         continue
 
+                    moving_piece = self.state.board.get_piece(*frm)
+
                     # apply move (basic legality)
                     captured, promoted = apply_move(self.state, frm, to)
                     # clear statuses on captured piece
@@ -245,6 +452,9 @@ class Room:
                     # update move_count
                     self.move_count += 1
                     self.state.move_count = self.move_count
+                    self.begin_move_log(self.move_count, moving_piece, frm, to)
+                    if promoted:
+                        self.log_event("Promotion", "piece", self.piece_ref(to))
                     if self.move_count == 1:
                         self.start_match_timer()
                     self.advance_temporary_effects()
@@ -252,6 +462,8 @@ class Room:
                     self.advance_chessplus_effects(full_move_completed)
                     self.apply_chessplus_cell_effects(to[0], to[1])
                     if self.is_pack_active("minesweeper") and self.state.board.get_piece(to[0], to[1]) is not None:
+                        if self.state.mines[to[1]][to[0]] == 1:
+                            self.log_event("Explosion", "tile", self.coord_to_alg((to[0], to[1])), extra="mine")
                         reveal_cell(self.state, to[0], to[1])
 
                     newly_activated = self.check_activate_packs()
@@ -260,12 +472,14 @@ class Room:
                     winner, reason = check_royal_elimination(self.state)
                     if winner:
                         self.broadcast_state()
+                        self.finalize_move_log()
                         self.end_game(reason, winner=winner)
                         break
                     # toggle turn after legal move
                     self.state.turn = 'black' if self.state.turn == 'white' else 'white'
                     # broadcast
                     self.broadcast_state()
+                    self.finalize_move_log()
                 elif mtype == 'use_item_request':
                     slot = msg.get('slot')
                     self.handle_item_request(conn, color, slot)
@@ -292,6 +506,11 @@ class Room:
                 self.clients = [c for c in self.clients if c['conn'] != conn]
                 if self.running:
                     self.running = False
+                    self.append_log({
+                        "type": "game_over",
+                        "reason": "opponent_left",
+                        "text": "Game over: opponent_left",
+                    })
                     for c in self.clients:
                         try:
                             send_json(c['conn'], {"type":"game_over","reason":"opponent_left"})
@@ -338,6 +557,7 @@ class Room:
                     activate_pack(pack_state, pack_def)
                     newly.append(pack_state.get("id"))
                     self.broadcast_popup(pack_state.get("name"), "Активація", pack_state.get("id"))
+                    self.note_pack_event(pack_state.get("name"), "Активація", pack_id=pack_state.get("id"))
             self.next_pack_activation += 5
         return newly
 
@@ -352,6 +572,7 @@ class Room:
                 pack_state["active"] = False
                 pack_state["next_effect_in"] = None
                 self.broadcast_popup(pack_state.get("name"), "Деактивація", pack_state.get("id"))
+                self.note_pack_event(pack_state.get("name"), "Деактивація", pack_id=pack_state.get("id"))
 
     def advance_pack_effects(self, current_color, skip_pack_ids=None):
         if skip_pack_ids is None:
@@ -386,13 +607,33 @@ class Room:
                 added, slot_idx = self.add_item_to_inventory(current_color, item)
                 if added:
                     self.broadcast_popup(pack_state.get("name"), item["name"], pack_state.get("id"))
+                    self.note_pack_event(pack_state.get("name"), item["name"], pack_id=pack_state.get("id"), effect_id=eff_def.get("id"))
                 else:
+                    self.note_pack_event(pack_state.get("name"), f"{item.get('name')} (не додано)", pack_id=pack_state.get("id"), effect_id=eff_def.get("id"))
                     conn = self.get_conn_by_color(current_color)
                     if conn:
                         self.send_popup_to_client(conn, "Інвентар заповнений", "Предмет не додано")
             else:
-                apply_effect(eff_def, self.state)
+                result = apply_effect(eff_def, self.state)
                 self.broadcast_popup(pack_state.get("name"), eff_def.get("name"), pack_state.get("id"))
+                self.note_pack_event(pack_state.get("name"), eff_def.get("name"), pack_id=pack_state.get("id"), effect_id=eff_def.get("id"))
+                if isinstance(result, dict):
+                    event = result.get("event")
+                    if isinstance(event, dict):
+                        name = event.get("name") or "Effect"
+                        etype = event.get("etype") or "board"
+                        target = event.get("target")
+                        extra = event.get("extra")
+                        if isinstance(target, (list, tuple)) and len(target) == 2 and isinstance(target[0], int):
+                            target = self.coord_to_alg((target[0], target[1]))
+                        elif isinstance(target, list):
+                            coords = []
+                            for item in target:
+                                if isinstance(item, (list, tuple)) and len(item) == 2:
+                                    coords.append(self.coord_to_alg((item[0], item[1])))
+                            if coords:
+                                target = ",".join(coords)
+                        self.log_event(name, etype, target, extra)
 
     def get_conn_by_color(self, color):
         for c in self.clients:
@@ -544,6 +785,7 @@ class Room:
         if not effect:
             return
         if effect == "void":
+            self.log_event("Void", "tile", self.coord_to_alg((x, y)))
             self.remove_piece_at(x, y)
             void_state = getattr(self.state, "chessplus_void", None)
             if void_state is not None:
@@ -553,8 +795,10 @@ class Room:
             piece = self.state.board.get_piece(x, y)
             if not piece:
                 return
+            before_type = piece.ptype
             roll = random.random()
             if roll < 0.2:
+                self.log_event("Dice", "piece", self.piece_ref((x, y), piece), extra="removed")
                 self.remove_piece_at(x, y)
                 self.broadcast_popup(self.pack_title("chessplus"), "Кубик", "chessplus")
             elif roll < 0.4:
@@ -563,41 +807,61 @@ class Room:
                     item = make_item(item_def)
                     added, slot_idx = self.add_item_to_inventory(piece.color, item)
                     if added:
+                        self.log_event("Dice", "piece", self.piece_ref((x, y), piece), extra=f"item:{item.get('name')}")
                         self.broadcast_popup(self.pack_title("chessplus"), item["name"], "chessplus")
                     else:
+                        self.log_event("Dice", "piece", self.piece_ref((x, y), piece), extra="item_failed")
                         conn = self.get_conn_by_color(piece.color)
                         if conn:
                             self.send_popup_to_client(conn, "Інвентар заповнений", "Предмет не додано")
             else:
-                mutate_piece_randomly(self.state, x, y)
+                new_type = mutate_piece_randomly(self.state, x, y)
+                self.log_event("Dice", "piece", self.piece_ref((x, y)), extra=f"{before_type}->{new_type}")
             self.clear_positional(self.state.chessplus_mutations, (x, y))
             return
         if effect == "fire":
             self.state.chessplus_burning[self.pos_key(x, y)] = 2
+            self.log_event("Fire", "tile", self.coord_to_alg((x, y)))
             return
         if effect == "bomb":
             k = self.pos_key(x, y)
             current = int(self.state.chessplus_bombs.get(k, 0)) if self.state.chessplus_bombs else 0
             self.state.chessplus_bombs[k] = max(current, 1)
+            self.log_event("Bomb", "tile", self.coord_to_alg((x, y)), extra="armed")
             return
         if effect == "swap":
-            self.trigger_swap()
+            result = self.trigger_swap()
+            if result:
+                a = result.get("a")
+                b = result.get("b")
+                if a and b:
+                    target = f"{self.coord_to_alg(a)}<->{self.coord_to_alg(b)}"
+                else:
+                    target = None
+                extra = None
+                if result.get("pa") or result.get("pb"):
+                    extra = f"{self.piece_short(result.get('pa'))}<->{self.piece_short(result.get('pb'))}"
+                self.log_event("Swap", "board", target, extra)
             self.clear_cell_effect(x, y)
             return
         if effect == "toxic":
-            self.apply_toxic(x, y)
+            outcome = self.apply_toxic(x, y)
+            extra = outcome or None
+            self.log_event("Toxic", "tile", self.coord_to_alg((x, y)), extra=extra)
             return
 
     def apply_toxic(self, x, y):
         if random.random() < 0.5:
             self.remove_piece_at(x, y)
+            return "removed"
         else:
             mutate_piece_randomly(self.state, x, y)
+            return "mutated"
 
     def trigger_swap(self):
         pieces = [(x, y) for y in range(8) for x in range(8) if self.state.board.get_piece(x, y)]
         if len(pieces) < 2:
-            return False
+            return None
         a, b = random.sample(pieces, 2)
         pa = self.state.board.get_piece(*a)
         pb = self.state.board.get_piece(*b)
@@ -612,7 +876,16 @@ class Room:
             self.state.chessplus_burning[self.pos_key(a[0], a[1])] = 2
         if self.get_cell_effect(b[0], b[1]) == "fire" and self.state.board.get_piece(*b):
             self.state.chessplus_burning[self.pos_key(b[0], b[1])] = 2
-        return True
+        promo_a = self.maybe_promote_pawn_at(a[0], a[1], reason="swap")
+        promo_b = self.maybe_promote_pawn_at(b[0], b[1], reason="swap")
+        return {
+            "a": a,
+            "b": b,
+            "pa": pa,
+            "pb": pb,
+            "promo_a": promo_a,
+            "promo_b": promo_b,
+        }
 
     def explode_area(self, cx, cy, radius=1):
         for x in range(cx - radius, cx + radius + 1):
@@ -633,6 +906,7 @@ class Room:
             if self.get_cell_effect(cx, cy) == "bomb":
                 self.clear_cell_effect(cx, cy)
             # explosion
+            self.log_event("Explosion", "tile", self.coord_to_alg((cx, cy)), extra="bomb")
             self.explode_area(cx, cy, radius=1)
             self.state.craters.add((cx, cy))
             # chain mines
@@ -640,7 +914,7 @@ class Room:
                 for y in range(cy - 1, cy + 2):
                     if 0 <= x < 8 and 0 <= y < 8:
                         if self.state.mines[y][x] == 1:
-                            trigger_mine(self.state, x, y)
+                            self.trigger_mine_event(x, y, source="bomb_chain")
             # chain bombs
             for x in range(cx - 1, cx + 2):
                 for y in range(cy - 1, cy + 2):
@@ -651,6 +925,7 @@ class Room:
     def trigger_nuke(self, center):
         cx, cy = center
         radius = 2
+        self.log_event("Nuke", "board", self.coord_to_alg((cx, cy)), extra="detonate")
         for x in range(cx - radius, cx + radius + 1):
             for y in range(cy - radius, cy + radius + 1):
                 if 0 <= x < 8 and 0 <= y < 8:
@@ -666,7 +941,7 @@ class Room:
             for y in range(cy - radius, cy + radius + 1):
                 if 0 <= x < 8 and 0 <= y < 8:
                     if self.state.mines[y][x] == 1:
-                        trigger_mine(self.state, x, y)
+                        self.trigger_mine_event(x, y, source="nuke_chain")
                     if self.pos_key(x, y) in self.state.chessplus_bombs:
                         self.state.chessplus_bombs.pop(self.pos_key(x, y), None)
                     if self.get_cell_effect(x, y) == "bomb":
@@ -711,8 +986,10 @@ class Room:
                 continue
             remaining = int(remaining) - 1
             if remaining <= 0:
+                victim = self.piece_ref((x, y))
                 self.remove_piece_at(x, y)
                 self.clear_positional(self.state.chessplus_burning, (x, y))
+                self.log_event("Burn", "piece", victim)
             else:
                 self.state.chessplus_burning[self.pos_key(x, y)] = remaining
 
@@ -743,6 +1020,7 @@ class Room:
                     self.set_cell_effect(nx, ny, "void")
                     void_state["cells"].append([nx, ny])
                     self.remove_piece_at(nx, ny)
+                    self.log_event("Void", "tile", self.coord_to_alg((nx, ny)), extra="expand")
                 void_state["next_expand"] = random.randint(1, 2)
             else:
                 void_state["next_expand"] = max(0, next_expand - 1)
@@ -752,8 +1030,10 @@ class Room:
             x, y = pos
             remaining = int(remaining) - 1
             if remaining <= 0:
+                clone_ref = self.piece_ref((x, y))
                 self.remove_piece_at(x, y)
                 self.clear_positional(self.state.chessplus_clones, (x, y))
+                self.log_event("Clone", "piece", clone_ref, extra="expired")
             else:
                 self.state.chessplus_clones[self.pos_key(x, y)] = remaining
 
@@ -828,6 +1108,7 @@ class Room:
             if not place_mine(self.state, x, y):
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
+            self.log_event("PlaceMine", "tile", self.coord_to_alg((x, y)))
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("minesweeper"), item.get("name"), "minesweeper")
             self.broadcast_state()
@@ -840,7 +1121,7 @@ class Room:
             if not (0 <= x < 8 and 0 <= y < 8) or self.state.mines[y][x] != 1:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
-            trigger_mine(self.state, x, y)
+            self.trigger_mine_event(x, y, source="item")
             self.state.mine_vision[color] = 0
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("minesweeper"), item.get("name"), "minesweeper")
@@ -872,12 +1153,16 @@ class Room:
             if self.state.board.get_piece(tx, ty) is not None:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
+            teleport_ref = f"{self.piece_short(piece)} {self.coord_to_alg((sx, sy))}->{self.coord_to_alg((tx, ty))}"
             self.clear_positional(self.state.chessplus_burning, (sx, sy))
             self.move_positional(self.state.chessplus_mutations, (sx, sy), (tx, ty))
             self.move_positional(self.state.chessplus_clones, (sx, sy), (tx, ty))
             self.state.board.move_piece((sx, sy), (tx, ty))
+            self.log_event("Teleport", "piece", teleport_ref)
             self.apply_chessplus_cell_effects(tx, ty)
             if self.is_pack_active("minesweeper") and self.state.board.get_piece(tx, ty) is not None:
+                if self.state.mines[ty][tx] == 1:
+                    self.log_event("Explosion", "tile", self.coord_to_alg((tx, ty)), extra="mine")
                 reveal_cell(self.state, tx, ty)
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
@@ -921,6 +1206,8 @@ class Room:
             step_x = (dx > 0) - (dx < 0)
             step_y = (dy > 0) - (dy < 0)
             hit = False
+            shooter_ref = f"{self.piece_short(piece)} {self.coord_to_alg((sx, sy))}->{self.coord_to_alg((tx, ty))}"
+            hit_ref = None
             cx, cy = sx, sy
             for _ in range(3):
                 nx, ny = cx + step_x, cy + step_y
@@ -930,12 +1217,17 @@ class Room:
                     break
                 target_piece = self.state.board.get_piece(nx, ny)
                 if target_piece:
+                    hit_ref = self.piece_ref((nx, ny), target_piece)
                     self.remove_piece_at(nx, ny)
                     hit = True
                     break
                 cx, cy = nx, ny
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
+            if hit_ref:
+                self.log_event("Pistol", "piece", shooter_ref, extra=f"hit:{hit_ref}")
+            else:
+                self.log_event("Pistol", "piece", shooter_ref, extra="miss")
             if hit:
                 winner, reason = check_royal_elimination(self.state)
                 if winner:
@@ -963,6 +1255,7 @@ class Room:
             nukes = getattr(self.state, "chessplus_nukes", [])
             nukes.append({"center": [sx, sy], "timer": 5})
             self.state.chessplus_nukes = nukes
+            self.log_event("Nuke", "board", self.coord_to_alg((sx, sy)), extra="armed")
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
             self.broadcast_state()
@@ -998,6 +1291,8 @@ class Room:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
             self.state.chessplus_clones[self.pos_key(tx, ty)] = 3
+            clone_ref = f"{self.piece_short(piece)} {self.coord_to_alg((sx, sy))}->{self.coord_to_alg((tx, ty))}"
+            self.log_event("Clone", "piece", clone_ref)
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
             self.broadcast_state()

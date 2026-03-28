@@ -1,0 +1,9 @@
+﻿{
+    "game_id":  0,
+    "started_at":  "",
+    "players":  {
+                    "white":  null,
+                    "black":  null
+                },
+    "events":  null
+}
