@@ -2,6 +2,8 @@
 from pathlib import Path
 import random
 import math
+import re
+import copy
 try:
     import cv2
     CV2_AVAILABLE = True
@@ -14,8 +16,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 from modules.game.state import GameState
-from modules.game.rules import validate_move
+from modules.game.rules import validate_move, apply_move
 from modules.game.board import coord_for_pixel, coord_in_bounds
+from modules.game.pieces import Piece
+from modules.dlc.minesweeper import compute_adj_counts, trigger_mine, clear_reveal_on_mine, reveal_numbers_under_pieces
 from modules.dlc.packs import PACK_DEFS
 import settings as cfg
 
@@ -51,6 +55,15 @@ class Client:
         self.available_packs = [{"id": p.get("id"), "name": p.get("name")} for p in PACK_DEFS]
         self.enabled_packs = {p.get("id"): True for p in PACK_DEFS}
         self.popups_enabled = True
+        self.replay_games = []
+        self.replay_selected = 0
+        self.replay_states = []
+        self.replay_state = None
+        self.replay_move_index = 0
+        self.replay_playing = False
+        self.replay_speed_index = 0
+        self.replay_next_time = 0.0
+        self.replay_game_rects = {}
         self.item_target_phase = None
         self.item_selected_piece = None
         self.last_nuke_event_id = 0
@@ -207,6 +220,7 @@ class Client:
         self.chain_reaction_delay = cfg.CHAIN_REACTION_DELAY
         self.winw = cfg.WINDOW_WIDTH
         self.winh = cfg.WINDOW_HEIGHT
+        self.replay_speeds = [("1x", 2.0), ("1.5x", 1.5), ("2x", 1.0), ("0.5x", 4.0)]
 
     def connect(self):
         self.last_error = None
@@ -405,6 +419,8 @@ class Client:
         while self.running:
             self.dt = clock.tick(60) / 1000.0
             self.update_shake()
+            if self.ui_state == "replay":
+                self.update_replay_autoplay()
             mouse_pos = pygame.mouse.get_pos()
             for ev in pygame.event.get():
                 if ev.type == pygame.QUIT:
@@ -447,6 +463,9 @@ class Client:
                         if rects["join"].collidepoint(ev.pos):
                             self.play_sfx_list(self.sfx_click)
                             self.ui_state = "mode"
+                        elif rects.get("replay") and rects["replay"].collidepoint(ev.pos):
+                            self.play_sfx_list(self.sfx_click)
+                            self.enter_replay_mode()
                         elif rects["settings"].collidepoint(ev.pos):
                             self.play_sfx_list(self.sfx_click)
                             self.ui_state = "settings"
@@ -517,6 +536,46 @@ class Client:
                             if rects.get("popups_toggle") and rects["popups_toggle"].collidepoint(ev.pos):
                                 self.play_sfx_list(self.sfx_click)
                                 self.popups_enabled = not self.popups_enabled
+                    elif self.ui_state == "replay":
+                        rects = self.replay_controls()
+                        list_rects = self.replay_game_rects or {}
+                        if rects.get("back") and rects["back"].collidepoint(ev.pos):
+                            self.play_sfx_list(self.sfx_click)
+                            self.ui_state = "menu"
+                            self.replay_playing = False
+                        else:
+                            clicked_game = False
+                            for idx, r in list_rects.items():
+                                if r.collidepoint(ev.pos):
+                                    self.play_sfx_list(self.sfx_click)
+                                    self.select_replay_game(idx)
+                                    clicked_game = True
+                                    break
+                            if clicked_game:
+                                continue
+                            if rects.get("first") and rects["first"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.replay_playing = False
+                                first_idx = 1 if self.get_replay_total_moves() > 0 else 0
+                                self.set_replay_index(first_idx)
+                            elif rects.get("prev") and rects["prev"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.replay_playing = False
+                                self.set_replay_index(self.replay_move_index - 1)
+                            elif rects.get("play") and rects["play"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.toggle_replay_play()
+                            elif rects.get("speed") and rects["speed"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.cycle_replay_speed()
+                            elif rects.get("next") and rects["next"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.replay_playing = False
+                                self.set_replay_index(self.replay_move_index + 1)
+                            elif rects.get("last") and rects["last"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.replay_playing = False
+                                self.set_replay_index(self.get_replay_total_moves())
                     elif self.ui_state == "game":
                         if time.time() < self.move_block_until:
                             continue
@@ -569,6 +628,8 @@ class Client:
                 self.draw_name_screen(screen, big_font, font, mouse_pos)
             elif self.ui_state == "settings":
                 self.draw_settings(screen, big_font, font, mouse_pos)
+            elif self.ui_state == "replay":
+                self.draw_replay(screen, big_font, font, mouse_pos)
             elif self.ui_state == "game":
                 self.game_over_buttons = {}
                 self.hover_cell = None
@@ -612,9 +673,10 @@ class Client:
             pass
 
     def menu_buttons(self):
-        join_rect = pygame.Rect(self.winw//2 - 120, self.winh//2 - 20, 240, 56)
-        settings_rect = pygame.Rect(self.winw//2 - 120, self.winh//2 + 50, 240, 56)
-        return {"join": join_rect, "settings": settings_rect}
+        join_rect = pygame.Rect(self.winw//2 - 120, self.winh//2 - 60, 240, 56)
+        replay_rect = pygame.Rect(self.winw//2 - 120, self.winh//2 + 4, 240, 56)
+        settings_rect = pygame.Rect(self.winw//2 - 120, self.winh//2 + 68, 240, 56)
+        return {"join": join_rect, "replay": replay_rect, "settings": settings_rect}
 
     def mode_buttons(self):
         w = 200
@@ -784,6 +846,7 @@ class Client:
         screen.blit(title, title.get_rect(center=(self.winw//2, self.winh//2 - 120)))
         rects = self.menu_buttons()
         self.draw_button(screen, rects["join"], "Join", font, "menu_join", rects["join"].collidepoint(mouse_pos))
+        self.draw_button(screen, rects["replay"], "Replay", font, "menu_replay", rects["replay"].collidepoint(mouse_pos))
         self.draw_button(screen, rects["settings"], "Налаштування", font, "menu_settings", rects["settings"].collidepoint(mouse_pos))
         self.draw_menu_footer(screen, font)
 
@@ -825,6 +888,555 @@ class Client:
             text_y = base_y - text.get_height()
         text_x = self.winw - padding - text.get_width()
         screen.blit(text, (text_x, text_y))
+
+    def enter_replay_mode(self):
+        self.load_replay_games()
+        if self.replay_games:
+            self.select_replay_game(0)
+        else:
+            self.replay_states = []
+            self.replay_state = None
+            self.replay_move_index = 0
+        self.replay_playing = False
+        self.replay_speed_index = 0
+        self.replay_next_time = 0.0
+        self.piece_animations = []
+        self.ui_state = "replay"
+
+    def load_replay_games(self):
+        self.replay_games = []
+        logs_dir = PROJECT_ROOT / "data" / "match_logs"
+        if not logs_dir.exists():
+            return
+        files = list(logs_dir.glob("game_*.json"))
+        def game_num(p):
+            m = re.search(r"game_(\\d+)", p.stem)
+            return int(m.group(1)) if m else 0
+        files.sort(key=game_num, reverse=True)
+        for path in files:
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            events = data.get("events", [])
+            moves = [e for e in events if e.get("type") == "move"]
+            game_over = None
+            for e in events:
+                if e.get("type") == "game_over":
+                    game_over = e
+            self.replay_games.append({
+                "path": path,
+                "game_id": data.get("game_id"),
+                "started_at": data.get("started_at", ""),
+                "players": data.get("players", {}),
+                "events": events,
+                "move_total": len(moves),
+                "game_over": game_over,
+            })
+
+    def select_replay_game(self, index):
+        if not self.replay_games:
+            return
+        index = max(0, min(index, len(self.replay_games) - 1))
+        self.replay_selected = index
+        game = self.replay_games[index]
+        self.replay_states = self.build_replay_states(game.get("events", []))
+        self.replay_move_index = 0
+        self.replay_state = self.snapshot_state(self.replay_states[0]) if self.replay_states else None
+        self.replay_playing = False
+        self.replay_next_time = time.time()
+        self.piece_animations = []
+        self.explosions = []
+        self.mine_reveals = []
+
+    def build_replay_states(self, events):
+        state = GameState()
+        state.setup_starting_position()
+        states = [self.snapshot_state(state)]
+        last_move_no = None
+        for i, entry in enumerate(events):
+            move_no = entry.get("move")
+            if move_no is not None and last_move_no is not None and move_no != last_move_no:
+                self.advance_replay_temporary_effects(state)
+            etype = entry.get("type")
+            if etype == "move":
+                frm = entry.get("from")
+                to = entry.get("to")
+                if isinstance(frm, list) and isinstance(to, list) and len(frm) == 2 and len(to) == 2:
+                    try:
+                        apply_move(state, (int(frm[0]), int(frm[1])), (int(to[0]), int(to[1])))
+                    except Exception:
+                        pass
+                if move_no is not None:
+                    state.move_count = int(move_no)
+            elif etype == "event":
+                self.apply_replay_event(state, entry)
+            if move_no is not None:
+                last_move_no = move_no
+            next_move = events[i + 1].get("move") if i + 1 < len(events) else None
+            if move_no is not None and move_no != next_move:
+                states.append(self.snapshot_state(state))
+        game_over = None
+        for entry in events:
+            if entry.get("type") == "game_over":
+                game_over = entry
+        if game_over:
+            final_position = game_over.get("final_position")
+            final_move = game_over.get("final_move")
+            if isinstance(final_position, dict):
+                final_state = self.state_from_position(final_position)
+                if final_move is not None:
+                    final_state.move_count = int(final_move)
+                if states and final_move is not None and states[-1].move_count == int(final_move):
+                    states[-1] = self.snapshot_state(final_state)
+                else:
+                    states.append(self.snapshot_state(final_state))
+        return states
+
+    def state_from_position(self, position):
+        state = GameState()
+        if not isinstance(position, dict):
+            return state
+        board = position.get("board", [])
+        for y in range(8):
+            for x in range(8):
+                cell = None
+                if y < len(board) and x < len(board[y]):
+                    cell = board[y][x]
+                if cell:
+                    state.board.set_piece(x, y, Piece(cell.get("ptype"), cell.get("color")))
+        if "mines" in position:
+            state.mines = position.get("mines")
+        if "revealed" in position:
+            state.revealed = position.get("revealed")
+        if "adj_counts" in position:
+            state.adj_counts = position.get("adj_counts")
+        craters = position.get("craters")
+        if craters:
+            state.craters = set(tuple(c) for c in craters)
+        if "chessplus_cells" in position:
+            state.chessplus_cells = position.get("chessplus_cells")
+        if "chessplus_walls" in position:
+            state.chessplus_walls = position.get("chessplus_walls")
+        if "chessplus_bombs" in position:
+            state.chessplus_bombs = position.get("chessplus_bombs")
+        if "chessplus_void" in position:
+            state.chessplus_void = position.get("chessplus_void")
+        if "chessplus_mutations" in position:
+            state.chessplus_mutations = position.get("chessplus_mutations")
+        if "chessplus_clones" in position:
+            state.chessplus_clones = position.get("chessplus_clones")
+        if "chessplus_nukes" in position:
+            state.chessplus_nukes = position.get("chessplus_nukes")
+        return state
+
+    def snapshot_state(self, state):
+        try:
+            return GameState.from_dict(copy.deepcopy(state.to_dict()))
+        except Exception:
+            return GameState.from_dict(state.to_dict())
+
+    def advance_replay_temporary_effects(self, state):
+        temp = getattr(state, "temp_reveal", None)
+        if temp and temp.get("remaining_moves", 0) > 0:
+            temp["remaining_moves"] = max(0, int(temp.get("remaining_moves", 0)) - 1)
+            if temp["remaining_moves"] == 0:
+                temp["cells"] = []
+        vision = getattr(state, "mine_vision", None)
+        if vision:
+            for color in ("white", "black"):
+                if vision.get(color, 0) > 0:
+                    vision[color] = max(0, int(vision.get(color, 0)) - 1)
+
+    def trigger_replay_explosions(self, prev_state, new_state):
+        prev_craters = set(getattr(prev_state, "craters", set()) or set())
+        new_craters = set(getattr(new_state, "craters", set()) or set())
+        added = new_craters - prev_craters
+        if not added:
+            return
+        prev = self.state
+        self.state = new_state
+        for coord in added:
+            self.handle_crater(coord)
+        self.state = prev
+
+    def set_replay_index(self, index):
+        total = self.get_replay_total_moves()
+        index = max(0, min(index, total))
+        prev_index = self.replay_move_index
+        prev_state = self.replay_state
+        self.replay_move_index = index
+        if self.replay_states and index < len(self.replay_states):
+            new_state = self.snapshot_state(self.replay_states[index])
+            if prev_state and new_state and abs(index - prev_index) == 1:
+                move_info = self.detect_moved_piece(prev_state, new_state)
+                if move_info:
+                    fx, fy, tx, ty, piece, _ = move_info
+                    prev_color = self.my_color
+                    self.my_color = "white"
+                    self.start_piece_animation(fx, fy, tx, ty, piece)
+                    self.my_color = prev_color
+                self.trigger_replay_explosions(prev_state, new_state)
+            else:
+                self.piece_animations = []
+                self.explosions = []
+                self.mine_reveals = []
+            self.replay_state = new_state
+
+    def get_replay_total_moves(self):
+        if not self.replay_states:
+            return 0
+        return max(0, len(self.replay_states) - 1)
+
+    def toggle_replay_play(self):
+        if self.get_replay_total_moves() == 0:
+            return
+        if self.replay_move_index >= self.get_replay_total_moves():
+            self.set_replay_index(0)
+        self.replay_playing = not self.replay_playing
+        if self.replay_playing:
+            _, interval = self.replay_speeds[self.replay_speed_index]
+            self.replay_next_time = time.time() + interval
+
+    def cycle_replay_speed(self):
+        self.replay_speed_index = (self.replay_speed_index + 1) % len(self.replay_speeds)
+        if self.replay_playing:
+            _, interval = self.replay_speeds[self.replay_speed_index]
+            self.replay_next_time = time.time() + interval
+
+    def update_replay_autoplay(self):
+        if not self.replay_playing:
+            return
+        if self.replay_move_index >= self.get_replay_total_moves():
+            self.replay_playing = False
+            return
+        label, interval = self.replay_speeds[self.replay_speed_index]
+        now = time.time()
+        if now >= self.replay_next_time:
+            self.set_replay_index(self.replay_move_index + 1)
+            self.replay_next_time = now + interval
+
+    def replay_controls(self):
+        layout = self.replay_layout()
+        board_x = layout["board_x"]
+        board_y = layout["board_y"]
+        board_size = layout["board_size"]
+        gap = 10
+        btn_h = 44
+        widths = [64, 64, 110, 64, 64, 64]
+        total = sum(widths) + gap * (len(widths) - 1)
+        x = board_x + (board_size - total) // 2
+        y = board_y + board_size + 24
+        rects = {}
+        rects["first"] = pygame.Rect(x, y, widths[0], btn_h)
+        rects["prev"] = pygame.Rect(x + (widths[0] + gap), y, widths[1], btn_h)
+        rects["play"] = pygame.Rect(x + (widths[0] + gap) + (widths[1] + gap), y, widths[2], btn_h)
+        rects["speed"] = pygame.Rect(x + (widths[0] + gap) + (widths[1] + gap) + (widths[2] + gap), y, widths[3], btn_h)
+        rects["next"] = pygame.Rect(x + (widths[0] + gap) + (widths[1] + gap) + (widths[2] + gap) + (widths[3] + gap), y, widths[4], btn_h)
+        rects["last"] = pygame.Rect(x + (widths[0] + gap) + (widths[1] + gap) + (widths[2] + gap) + (widths[3] + gap) + (widths[4] + gap), y, widths[5], btn_h)
+        rects["back"] = pygame.Rect(20, 20, 120, 40)
+        return rects
+
+    def draw_replay(self, screen, big_font, font, mouse_pos):
+        screen.fill(self.colors["vanilla_bg"])
+        title = big_font.render("Replay", True, self.colors["vanilla_secondary"])
+        screen.blit(title, (20, 20))
+
+        rects = self.replay_controls()
+        self.draw_button(screen, rects["back"], "Назад", font, "replay_back", rects["back"].collidepoint(mouse_pos))
+
+        # draw board
+        prev_state = self.state
+        prev_color = self.my_color
+        self.state = self.replay_state
+        self.my_color = "white"
+        self.hover_cell = None
+        self.draw_board_background(screen, None, set(), set(), set(), None)
+        if self.state:
+            self.draw_board_pieces(screen)
+            self.draw_mine_reveals(screen)
+            self.draw_piece_animations(screen)
+            self.draw_explosions(screen)
+        self.state = prev_state
+        self.my_color = prev_color
+
+        # controls
+        play_label = "PLAY" if not self.replay_playing else "PAUSE"
+        speed_label = self.replay_speeds[self.replay_speed_index][0]
+        self.draw_button(screen, rects["first"], "<<", font, "replay_first", rects["first"].collidepoint(mouse_pos))
+        self.draw_button(screen, rects["prev"], "<", font, "replay_prev", rects["prev"].collidepoint(mouse_pos))
+        self.draw_button(screen, rects["play"], play_label, font, "replay_play", rects["play"].collidepoint(mouse_pos))
+        self.draw_button(screen, rects["speed"], speed_label, font, "replay_speed", rects["speed"].collidepoint(mouse_pos))
+        self.draw_button(screen, rects["next"], ">", font, "replay_next", rects["next"].collidepoint(mouse_pos))
+        self.draw_button(screen, rects["last"], ">>", font, "replay_last", rects["last"].collidepoint(mouse_pos))
+
+        # move counter
+        total = self.get_replay_total_moves()
+        move_txt = font.render(f"Хід: {self.replay_move_index}/{total}", True, (220, 220, 220))
+        screen.blit(move_txt, move_txt.get_rect(center=(self.winw // 2, rects["first"].bottom + 24)))
+
+        # game over summary
+        game_over = None
+        if self.replay_games and 0 <= self.replay_selected < len(self.replay_games):
+            game_over = self.replay_games[self.replay_selected].get("game_over")
+        info_y = rects["first"].bottom + 46
+        if game_over:
+            final_move = game_over.get("final_move")
+            if final_move is not None:
+                final_txt = font.render(f"Фінальний хід: {final_move}", True, (210, 210, 210))
+                screen.blit(final_txt, final_txt.get_rect(center=(self.winw // 2, info_y)))
+                info_y += 22
+            comment = game_over.get("comment") or ""
+            if comment:
+                max_w = self.cell * 8 - 40
+                lines = self.wrap_text(comment, font, max_w)
+                for line in lines[:3]:
+                    surf = font.render(line, True, (190, 190, 190))
+                    screen.blit(surf, surf.get_rect(center=(self.winw // 2, info_y)))
+                    info_y += 20
+
+        # game list
+        layout = self.replay_layout()
+        panel = layout["panel_rect"]
+        list_x = panel.x + 12
+        list_y = panel.y + 70
+        list_w = panel.width - 24
+        row_h = 56
+        self.replay_game_rects = {}
+        list_title = font.render("Партії", True, self.colors["vanilla_secondary"])
+        screen.blit(list_title, (panel.x + 12, panel.y + 18))
+
+        if not self.replay_games:
+            msg = font.render("Немає збережених ігор", True, (180, 180, 180))
+            screen.blit(msg, (list_x, list_y + 8))
+            return
+
+        for i, game in enumerate(self.replay_games):
+            y = list_y + i * row_h
+            if y + row_h > panel.bottom:
+                break
+            row_rect = pygame.Rect(list_x, y, list_w, row_h - 8)
+            self.replay_game_rects[i] = row_rect
+            hovered = row_rect.collidepoint(mouse_pos)
+            selected = (i == self.replay_selected)
+            bg = (60, 50, 80) if hovered else (52, 42, 70)
+            if selected:
+                bg = (76, 60, 100)
+            pygame.draw.rect(screen, bg, row_rect, border_radius=8)
+            pygame.draw.rect(screen, self.colors["vanilla_button_border"], row_rect, 2, border_radius=8)
+
+            gid = game.get("game_id")
+            players = game.get("players", {})
+            white = players.get("white") or "White"
+            black = players.get("black") or "Black"
+            title_text = f"#{gid} {white} vs {black}" if gid is not None else f"{white} vs {black}"
+            title_surf = self.fit_text_surface(font, title_text, row_rect.width - 16, (230, 230, 230), max_height=22)
+            screen.blit(title_surf, (row_rect.x + 8, row_rect.y + 6))
+
+            sub = game.get("started_at") or ""
+            if sub:
+                sub_surf = self.fit_text_surface(font, sub, row_rect.width - 16, (180, 180, 180), max_height=20)
+                screen.blit(sub_surf, (row_rect.x + 8, row_rect.y + 28))
+
+    def apply_replay_event(self, state, entry):
+        name = entry.get("name") or ""
+        target = entry.get("target")
+        extra = entry.get("extra") or ""
+        coords = self.extract_coords(target)
+
+        if name in ("SpawnMine", "SpawnMines", "PlaceMine"):
+            for (x, y) in coords:
+                if 0 <= x < 8 and 0 <= y < 8:
+                    state.mines[y][x] = 1
+                    clear_reveal_on_mine(state, x, y)
+            compute_adj_counts(state)
+            reveal_numbers_under_pieces(state, duration_moves=2)
+            return
+
+        if name == "RevealNumbers":
+            cells = []
+            for (x, y) in coords:
+                if 0 <= x < 8 and 0 <= y < 8:
+                    cells.append([x, y])
+            state.temp_reveal = {"cells": cells, "remaining_moves": 2 if cells else 0}
+            return
+
+        if name == "Explosion":
+            for (x, y) in coords:
+                self.apply_replay_explosion(state, (x, y), radius=1)
+            return
+
+        if name == "Nuke":
+            if "detonate" in str(extra):
+                for (x, y) in coords:
+                    self.apply_replay_explosion(state, (x, y), radius=2)
+                nukes = getattr(state, "chessplus_nukes", None)
+                if nukes is not None and coords:
+                    remaining = []
+                    for nuke in nukes:
+                        center = nuke.get("center") if isinstance(nuke, dict) else None
+                        if center and tuple(center) in coords:
+                            continue
+                        remaining.append(nuke)
+                    state.chessplus_nukes = remaining
+                return
+            if "armed" in str(extra):
+                for (x, y) in coords:
+                    state.chessplus_nukes.append({"center": [x, y], "timer": 5})
+                return
+
+        if name == "DiceTile":
+            for (x, y) in coords:
+                state.chessplus_cells[y][x] = "dice"
+            return
+        if name in ("FireTile", "Fire"):
+            for (x, y) in coords:
+                state.chessplus_cells[y][x] = "fire"
+                if name == "Fire":
+                    state.chessplus_burning[self.pos_key(x, y)] = 2
+            return
+        if name in ("BombTile", "Bomb"):
+            for (x, y) in coords:
+                state.chessplus_cells[y][x] = "bomb"
+                if name == "Bomb" and "armed" in str(extra):
+                    state.chessplus_bombs[self.pos_key(x, y)] = 1
+            return
+        if name == "SwapTile":
+            for (x, y) in coords:
+                state.chessplus_cells[y][x] = "swap"
+            return
+        if name == "Wall":
+            if len(coords) >= 2:
+                x1, y1 = coords[0]
+                x2, y2 = coords[1]
+                state.chessplus_walls.append([x1, y1, x2, y2])
+            return
+        if name == "Void":
+            for (x, y) in coords:
+                if 0 <= x < 8 and 0 <= y < 8:
+                    state.chessplus_cells[y][x] = "void"
+                    state.board.set_piece(x, y, None)
+            return
+        if name == "Swap" and len(coords) >= 2:
+            (ax, ay), (bx, by) = coords[0], coords[1]
+            pa = state.board.get_piece(ax, ay)
+            pb = state.board.get_piece(bx, by)
+            state.board.set_piece(ax, ay, pb)
+            state.board.set_piece(bx, by, pa)
+            return
+        if name == "Teleport" and len(coords) >= 2:
+            (sx, sy), (tx, ty) = coords[0], coords[1]
+            p = state.board.get_piece(sx, sy)
+            if p:
+                state.board.set_piece(sx, sy, None)
+                state.board.set_piece(tx, ty, p)
+            return
+        if name == "Pistol":
+            hit_coords = self.extract_coords(extra)
+            if hit_coords:
+                x, y = hit_coords[0]
+                state.board.set_piece(x, y, None)
+            return
+        if name == "Burn":
+            if coords:
+                x, y = coords[0]
+                state.board.set_piece(x, y, None)
+                state.chessplus_burning.pop(self.pos_key(x, y), None)
+            return
+        if name == "Clone":
+            if "expired" in str(extra):
+                if coords:
+                    x, y = coords[0]
+                    state.board.set_piece(x, y, None)
+                    state.chessplus_clones.pop(self.pos_key(x, y), None)
+            elif len(coords) >= 2:
+                (sx, sy), (tx, ty) = coords[0], coords[1]
+                p = state.board.get_piece(sx, sy)
+                if p:
+                    state.board.set_piece(tx, ty, Piece(p.ptype, p.color))
+                    state.chessplus_clones[self.pos_key(tx, ty)] = 3
+            return
+        if name == "PawnMutation":
+            if coords:
+                muts = getattr(state, "chessplus_mutations", None)
+                if muts is None:
+                    state.chessplus_mutations = {}
+                    muts = state.chessplus_mutations
+                for (x, y) in coords:
+                    muts[self.pos_key(x, y)] = "backstep"
+            return
+        if name == "Promotion":
+            if coords:
+                x, y = coords[0]
+                p = state.board.get_piece(x, y)
+                if p:
+                    p.ptype = "queen"
+                    p.is_royal = True
+            return
+        if name == "Dice":
+            if coords:
+                x, y = coords[0]
+                p = state.board.get_piece(x, y)
+                if "removed" in str(extra):
+                    state.board.set_piece(x, y, None)
+                elif "->" in str(extra) and p:
+                    new_type = str(extra).split("->")[-1].strip()
+                    p.ptype = new_type
+                    p.is_royal = new_type in ("king", "queen")
+            return
+        if name == "Toxic":
+            if coords and "removed" in str(extra):
+                x, y = coords[0]
+                state.board.set_piece(x, y, None)
+            return
+
+    def apply_replay_explosion(self, state, center, radius=1):
+        cx, cy = center
+        if radius <= 1:
+            try:
+                trigger_mine(state, cx, cy)
+            except Exception:
+                pass
+            return
+        for x in range(cx - radius, cx + radius + 1):
+            for y in range(cy - radius, cy + radius + 1):
+                if 0 <= x < 8 and 0 <= y < 8:
+                    state.board.set_piece(x, y, None)
+                    state.mines[y][x] = 0
+                    state.revealed[y][x] = 0
+        state.craters.add((cx, cy))
+        compute_adj_counts(state)
+
+    def extract_coords(self, value):
+        coords = []
+        if value is None:
+            return coords
+        if isinstance(value, (list, tuple)):
+            if len(value) == 2 and all(isinstance(v, int) for v in value):
+                return [tuple(value)]
+            for item in value:
+                coords.extend(self.extract_coords(item))
+            return coords
+        if isinstance(value, str):
+            matches = re.findall(r"[a-h][1-8]", value)
+            for m in matches:
+                coord = self.coord_from_alg(m)
+                if coord is not None:
+                    coords.append(coord)
+        return coords
+
+    def coord_from_alg(self, alg):
+        try:
+            file = alg[0].lower()
+            rank = int(alg[1:])
+            x = ord(file) - ord('a')
+            y = rank - 1
+            if 0 <= x < 8 and 0 <= y < 8:
+                return (x, y)
+        except Exception:
+            return None
+        return None
 
     def draw_mode_select(self, screen, font, mouse_pos):
         title = font.render("Оберіть режим", True, self.colors["vanilla_secondary"])
@@ -936,9 +1548,18 @@ class Client:
         self.shake_offset = (ox, oy)
 
     def get_board_origin(self):
-        bx, by = self.board_origin
+        if self.ui_state == "replay":
+            bx, by = self.get_replay_board_origin()
+        else:
+            bx, by = self.board_origin
         ox, oy = self.shake_offset
         return (bx + ox, by + oy)
+
+    def get_replay_board_origin(self):
+        board_size = self.cell * 8
+        bx = (self.winw - board_size) // 2
+        by = self.margin
+        return (bx, by)
 
     def layout(self):
         board_x, board_y = self.board_origin
@@ -946,6 +1567,24 @@ class Client:
         gap = self.margin
         panel_x = board_x + board_size + gap
         panel_w = max(0, self.winw - panel_x - gap)
+        panel_rect = pygame.Rect(panel_x, board_y, panel_w, board_size)
+        return {
+            "board_x": board_x,
+            "board_y": board_y,
+            "board_size": board_size,
+            "gap": gap,
+            "panel_rect": panel_rect,
+        }
+
+    def replay_layout(self):
+        board_x, board_y = self.get_replay_board_origin()
+        board_size = self.cell * 8
+        gap = 20
+        panel_x = board_x + board_size + gap
+        panel_w = max(0, self.winw - panel_x - gap)
+        if panel_w < 200:
+            panel_x = gap
+            panel_w = max(0, board_x - gap * 2)
         panel_rect = pygame.Rect(panel_x, board_y, panel_w, board_size)
         return {
             "board_x": board_x,
@@ -963,7 +1602,7 @@ class Client:
             return "win" if self.game_over_winner == self.my_color else "lose"
         if self.ui_state == "intro":
             return None
-        if self.ui_state in ("menu", "mode", "host_menu", "name", "settings"):
+        if self.ui_state in ("menu", "mode", "host_menu", "name", "settings", "replay"):
             return "menu"
         if self.ui_state == "game" and not self.has_state:
             return "menu"
@@ -1425,6 +2064,7 @@ class Client:
             if t >= 1.0:
                 continue
             t = max(0.0, min(1.0, t))
+            t = t * t * (3 - 2 * t)
             sx, sy = anim["start"]
             ex, ey = anim["end"]
             px = sx + (ex - sx) * t
@@ -1607,6 +2247,20 @@ class Client:
         if not vision:
             return False
         return vision.get(self.my_color, 0) > 0
+
+    def replay_has_mines(self):
+        if not self.state:
+            return False
+        for row in self.state.mines:
+            if 1 in row:
+                return True
+        for row in self.state.revealed:
+            if 1 in row:
+                return True
+        temp = getattr(self.state, "temp_reveal", None)
+        if temp and temp.get("cells"):
+            return True
+        return False
 
     def clear_item_targeting(self):
         self.selected_item_slot = None
@@ -1794,6 +2448,12 @@ class Client:
         temp_reveal = self.get_temp_reveal_cells()
         show_mines = self.has_mine_vision()
         mines_active = self.state is not None and self.is_pack_active("minesweeper")
+        if self.ui_state == "replay" and self.state is not None:
+            mines_active = mines_active or self.replay_has_mines()
+            if not show_mines:
+                vision = getattr(self.state, "mine_vision", None)
+                if vision and any(vision.get(c, 0) > 0 for c in ("white", "black")):
+                    show_mines = True
         for y in range(8):
             for x in range(8):
                 rect = pygame.Rect(bx + x*self.cell, by + y*self.cell, self.cell, self.cell)
@@ -2186,6 +2846,21 @@ class Client:
         }
         return mapping.get(code, code)
 
+    def compute_final_score(self):
+        if not self.state:
+            return None
+        royals = {"white": 0, "black": 0}
+        material = {"white": 0, "black": 0}
+        for y in range(8):
+            for x in range(8):
+                p = self.state.board.get_piece(x, y)
+                if not p:
+                    continue
+                material[p.color] = material.get(p.color, 0) + cfg.PIECE_VALUES.get(p.ptype, 0)
+                if p.ptype in cfg.ROYAL_TYPES:
+                    royals[p.color] = royals.get(p.color, 0) + 1
+        return {"royals": royals, "material": material}
+
     def draw_top_bar(self, screen, font):
         layout = self.layout()
         board_x = layout["board_x"]
@@ -2527,8 +3202,20 @@ class Client:
             s_rect = s_surf.get_rect(center=(self.winw // 2, self.winh // 2 + 20))
             screen.blit(s_surf, s_rect)
 
+        score = self.compute_final_score()
+        if score:
+            royals = score.get("royals", {})
+            material = score.get("material", {})
+            score_text = (
+                f"Рахунок: королівські {royals.get('white', 0)}-{royals.get('black', 0)}, "
+                f"матеріал {material.get('white', 0)}-{material.get('black', 0)}"
+            )
+            sc_surf = font.render(score_text, True, (200, 200, 200))
+            sc_rect = sc_surf.get_rect(center=(self.winw // 2, self.winh // 2 + 44))
+            screen.blit(sc_surf, sc_rect)
+
         hint = font.render("Оберіть дію:", True, (200, 200, 200))
-        h_rect = hint.get_rect(center=(self.winw // 2, self.winh // 2 + 60))
+        h_rect = hint.get_rect(center=(self.winw // 2, self.winh // 2 + 78))
         screen.blit(hint, h_rect)
 
         rects = self.get_game_over_buttons()
@@ -2547,7 +3234,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-

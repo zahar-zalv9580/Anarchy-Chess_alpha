@@ -120,6 +120,7 @@ class Room:
         self.log_path = None
         self.active_move_no = None
         self.active_move_info = None
+        self.last_move_info = None
         self.pending_log_entries = []
         self.pending_pack_events = []
         self.pending_event_summaries = []
@@ -202,6 +203,87 @@ class Room:
             return self.fix_mojibake(obj)
         return obj
 
+    def serialize_position(self):
+        board_serial = []
+        for y in range(8):
+            row = []
+            for x in range(8):
+                p = self.state.board.get_piece(x, y)
+                if p:
+                    row.append({"ptype": p.ptype, "color": p.color})
+                else:
+                    row.append(None)
+            board_serial.append(row)
+        return {
+            "board": board_serial,
+            "mines": self.state.mines,
+            "revealed": self.state.revealed,
+            "adj_counts": self.state.adj_counts,
+            "craters": [[x, y] for (x, y) in self.state.craters],
+            "chessplus_cells": self.state.chessplus_cells,
+            "chessplus_walls": self.state.chessplus_walls,
+            "chessplus_bombs": self.state.chessplus_bombs,
+            "chessplus_void": self.state.chessplus_void,
+            "chessplus_mutations": self.state.chessplus_mutations,
+            "chessplus_clones": self.state.chessplus_clones,
+            "chessplus_nukes": self.state.chessplus_nukes,
+        }
+
+    def build_final_score(self):
+        royals = count_royals(self.state)
+        material = {
+            "white": material_score(self.state, "white"),
+            "black": material_score(self.state, "black"),
+        }
+        return {"royals": royals, "material": material}
+
+    def reason_text(self, reason):
+        mapping = {
+            "royal_captured": "Знищені всі королівські фігури суперника",
+            "royal_both": "Обидва гравці втратили королівські фігури",
+            "timer_royal": "Таймер: більше королівських фігур",
+            "timer_material": "Таймер: більше матеріалу",
+            "timer_random": "Таймер: випадковий вибір",
+            "opponent_left": "Суперник вийшов",
+        }
+        return mapping.get(reason, reason)
+
+    def build_game_over_comment(self, reason, winner, final_score):
+        reason_txt = self.reason_text(reason)
+        winner_txt = None
+        if winner == "white":
+            winner_txt = "білий"
+        elif winner == "black":
+            winner_txt = "чорний"
+        royals = final_score.get("royals", {})
+        material = final_score.get("material", {})
+        base = f"Кінець гри: {reason_txt}."
+        if winner_txt:
+            base += f" Переможець: {winner_txt}."
+        base += (
+            f" Рахунок: королівські {royals.get('white', 0)}-{royals.get('black', 0)}, "
+            f"матеріал {material.get('white', 0)}-{material.get('black', 0)}."
+        )
+        return base
+
+    def log_game_over(self, reason, winner=None):
+        final_score = self.build_final_score()
+        final_position = self.serialize_position()
+        final_move = self.move_count
+        final_move_text = self.last_move_info.get("text") if self.last_move_info else None
+        comment = self.build_game_over_comment(reason, winner, final_score)
+        self.append_log({
+            "type": "game_over",
+            "reason": reason,
+            "winner": winner,
+            "final_move": final_move,
+            "final_move_text": final_move_text,
+            "final_position": final_position,
+            "final_score": final_score,
+            "comment": comment,
+            "text": f"Game over: {reason}" + (f" ({winner})" if winner else ""),
+        })
+
     def queue_log_entry(self, entry):
         if self.active_move_no is None:
             self.append_log(entry)
@@ -237,6 +319,13 @@ class Room:
             "pack_effects": list(self.pending_pack_events),
             "events": list(self.pending_event_summaries),
         })
+        self.last_move_info = {
+            "move": self.active_move_no,
+            "piece": self.piece_short(piece),
+            "from": list(frm),
+            "to": list(to),
+            "text": move_text,
+        }
         for entry in self.pending_log_entries:
             self.append_log(entry)
         self.active_move_no = None
@@ -312,12 +401,7 @@ class Room:
                     print("Broadcast error:", e)
 
     def end_game(self, reason, winner=None):
-        self.append_log({
-            "type": "game_over",
-            "reason": reason,
-            "winner": winner,
-            "text": f"Game over: {reason}" + (f" ({winner})" if winner else ""),
-        })
+        self.log_game_over(reason, winner)
         payload = {"type":"game_over", "reason": reason}
         if winner:
             payload["winner"] = winner
@@ -506,11 +590,8 @@ class Room:
                 self.clients = [c for c in self.clients if c['conn'] != conn]
                 if self.running:
                     self.running = False
-                    self.append_log({
-                        "type": "game_over",
-                        "reason": "opponent_left",
-                        "text": "Game over: opponent_left",
-                    })
+                    winner = self.clients[0]["color"] if self.clients else None
+                    self.log_game_over("opponent_left", winner=winner)
                     for c in self.clients:
                         try:
                             send_json(c['conn'], {"type":"game_over","reason":"opponent_left"})
