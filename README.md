@@ -122,8 +122,8 @@
 ```
 assets/
   textures/
-  sfx/
-  ost/
+  sound/
+  video/
   fonts/
 
 modules/
