@@ -22,6 +22,8 @@ FONT_MAIN_NAME = "IosevkaCharon"
 FONT_MAIN_FILE = "IosevkaCharon-BoldItalic.ttf"
 FONT_ACCENT_NAME = "Handjet-Medium"
 FONT_ACCENT_FILE = "Handjet-Medium.ttf"
+FONT_USES_NAME = "Minecraft_1.1"
+FONT_USES_FILE = "Minecraft_1.1.ttf"
 
 PIECE_VALUES = {
     "pawn": 1,
@@ -29,6 +31,10 @@ PIECE_VALUES = {
     "bishop": 3,
     "rook": 5,
     "queen": 9,
-    "king": 0,
+    "king": 2,
+    "amazon": 12,
+    "archbishop": 6,
+    "camel": 3,
+    "giant_pawn": 3,
 }
-ROYAL_TYPES = {"king", "queen"}
+ROYAL_TYPES = {"king", "queen", "amazon"}

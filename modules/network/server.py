@@ -43,19 +43,33 @@ def save_game_id(game_id):
 
 def count_royals(state):
     counts = {"white": 0, "black": 0}
+    seen = set()
     for y in range(8):
         for x in range(8):
             p = state.board.get_piece(x, y)
             if p and p.ptype in cfg.ROYAL_TYPES:
+                key = getattr(p, "gid", None)
+                if key is None:
+                    key = id(p)
+                if key in seen:
+                    continue
+                seen.add(key)
                 counts[p.color] += 1
     return counts
 
 def material_score(state, color):
     score = 0
+    seen = set()
     for y in range(8):
         for x in range(8):
             p = state.board.get_piece(x, y)
             if p and p.color == color:
+                key = getattr(p, "gid", None)
+                if key is None:
+                    key = id(p)
+                if key in seen:
+                    continue
+                seen.add(key)
                 score += cfg.PIECE_VALUES.get(p.ptype, 0)
     return score
 
@@ -124,6 +138,7 @@ class Room:
         self.pending_log_entries = []
         self.pending_pack_events = []
         self.pending_event_summaries = []
+        self.pending_chaos = None
 
     def coord_to_alg(self, pos):
         if pos is None:
@@ -143,6 +158,10 @@ class Room:
             "rook": "R",
             "queen": "Q",
             "king": "K",
+            "amazon": "A",
+            "archbishop": "H",
+            "camel": "C",
+            "giant_pawn": "G",
         }
         return f"{piece.color[0]}{letters.get(piece.ptype, piece.ptype[:1].upper())}"
 
@@ -203,6 +222,110 @@ class Room:
             return self.fix_mojibake(obj)
         return obj
 
+    def begin_chaos_action(self):
+        self.pending_chaos = {
+            "capture": False,
+            "explosions": 0,
+            "item_used": 0,
+            "effects": False,
+            "other": 0,
+        }
+
+    def mark_chaos_capture(self):
+        if self.pending_chaos is not None:
+            self.pending_chaos["capture"] = True
+
+    def mark_chaos_item(self):
+        if self.pending_chaos is not None:
+            self.pending_chaos["item_used"] += 1
+            self.pending_chaos["effects"] = True
+
+    def mark_chaos_effect(self, kind=None):
+        if self.pending_chaos is None:
+            return
+        self.pending_chaos["effects"] = True
+        if kind == "explosion":
+            self.pending_chaos["explosions"] += 1
+        elif kind == "other":
+            self.pending_chaos["other"] += 1
+
+    def apply_chaos_after_action(self, action_type="move"):
+        if self.pending_chaos is None:
+            return
+        chaos = int(getattr(self.state, "chaos", 0))
+        delta = 0
+        if self.pending_chaos["capture"]:
+            delta += 2
+        if self.pending_chaos["explosions"] > 0:
+            delta += 3
+        if self.pending_chaos["explosions"] >= 2:
+            delta += 5
+        if self.pending_chaos["item_used"] > 0:
+            delta += 4
+        delta += min(self.pending_chaos["other"], 3)
+        if action_type == "move":
+            if (not self.pending_chaos["capture"] and self.pending_chaos["explosions"] == 0
+                    and self.pending_chaos["item_used"] == 0 and not self.pending_chaos["effects"]):
+                delta -= 2
+        chaos = max(0, min(100, chaos + delta))
+        self.state.chaos = chaos
+        self.pending_chaos = None
+
+    def chaos_level(self):
+        return int(getattr(self.state, "chaos", 0))
+
+    def pack_activation_step(self):
+        chaos = self.chaos_level()
+        if chaos >= 80:
+            return 1
+        if chaos >= 60:
+            return 2
+        if chaos >= 40:
+            return 3
+        if chaos >= 20:
+            return 4
+        return 5
+
+    def ensure_min_active_packs(self, target_active):
+        if target_active <= 0 or not self.state.dlc_packs:
+            return []
+        active = [p for p in self.state.dlc_packs if p.get("active")]
+        if len(active) >= target_active:
+            return []
+        newly = []
+        for _ in range(target_active - len(active)):
+            inactive = [p for p in self.state.dlc_packs if not p.get("active")]
+            pack_state = random.choice(inactive) if inactive else None
+            if not pack_state:
+                break
+            pack_def = self.pack_def_by_id.get(pack_state.get("id")) or get_pack_def(pack_state.get("id"))
+            if pack_def:
+                activate_pack(pack_state, pack_def)
+                if self.chaos_level() >= 60:
+                    pack_state["next_effect_in"] = 1
+                newly.append(pack_state.get("id"))
+                self.broadcast_popup(pack_state.get("name"), "Активація", pack_state.get("id"))
+                self.note_pack_event(pack_state.get("name"), "Активація", pack_id=pack_state.get("id"))
+        return newly
+
+    def refresh_extra_piece_types(self):
+        extras = []
+        for pack_state in self.state.dlc_packs:
+            if not pack_state.get("active"):
+                continue
+            pack_def = self.pack_def_by_id.get(pack_state.get("id")) or get_pack_def(pack_state.get("id"))
+            if not pack_def:
+                continue
+            extras.extend(pack_def.get("piece_types", []))
+        seen = set()
+        ordered = []
+        for t in extras:
+            if t in seen:
+                continue
+            seen.add(t)
+            ordered.append(t)
+        self.state.extra_piece_types = ordered
+
     def serialize_position(self):
         board_serial = []
         for y in range(8):
@@ -210,7 +333,17 @@ class Room:
             for x in range(8):
                 p = self.state.board.get_piece(x, y)
                 if p:
-                    row.append({"ptype": p.ptype, "color": p.color})
+                    cell = {"ptype": p.ptype, "color": p.color}
+                    gid = getattr(p, "gid", None)
+                    if gid is not None:
+                        cell["gid"] = gid
+                    size = getattr(p, "size", None)
+                    if size is not None and int(size) > 1:
+                        cell["size"] = int(size)
+                    anchor = getattr(p, "anchor", None)
+                    if anchor is not None:
+                        cell["anchor"] = [int(anchor[0]), int(anchor[1])]
+                    row.append(cell)
                 else:
                     row.append(None)
             board_serial.append(row)
@@ -296,6 +429,7 @@ class Room:
         self.pending_log_entries = []
         self.pending_pack_events = []
         self.pending_event_summaries = []
+        self.begin_chaos_action()
 
     def finalize_move_log(self):
         if self.active_move_no is None or not self.active_move_info:
@@ -340,6 +474,7 @@ class Room:
         label = f"{pack_name}: {action}" if pack_name else action
         if self.active_move_no is not None:
             self.pending_pack_events.append(label)
+        self.mark_chaos_effect("other")
         entry = {
             "type": "pack",
             "pack": pack_name,
@@ -359,6 +494,10 @@ class Room:
         summary += ")"
         if self.active_move_no is not None:
             self.pending_event_summaries.append(summary)
+        if name == "Explosion":
+            self.mark_chaos_effect("explosion")
+        else:
+            self.mark_chaos_effect("other")
         entry = {
             "type": "event",
             "name": name,
@@ -449,6 +588,8 @@ class Room:
         self.state.setup_starting_position()
         self.state.dlc_packs = build_pack_states(self.pack_defs)
         self.state.inventory = {"white": [None]*9, "black": [None]*9}
+        self.state.extra_piece_types = []
+        self.refresh_extra_piece_types()
         self.move_count = 0
         self.match_start_time = None
         self.timer_thread = None
@@ -521,15 +662,33 @@ class Room:
                         continue
 
                     moving_piece = self.state.board.get_piece(*frm)
+                    moving_cells_before = []
+                    if moving_piece and hasattr(self.state.board, "iter_piece_cells"):
+                        moving_cells_before = self.state.board.iter_piece_cells(moving_piece)
+                        anchor = self.state.board.find_piece_anchor(moving_piece) if hasattr(self.state.board, "find_piece_anchor") else None
+                        if anchor is not None:
+                            frm = anchor
 
                     # apply move (basic legality)
-                    captured, promoted = apply_move(self.state, frm, to)
+                    captured_positions, promoted = apply_move(self.state, frm, to)
+                    if captured_positions:
+                        self.mark_chaos_capture()
                     # clear statuses on captured piece
-                    self.clear_positional(self.state.chessplus_mutations, to)
-                    self.clear_positional(self.state.chessplus_clones, to)
-                    self.clear_positional(self.state.chessplus_burning, to)
+                    if captured_positions:
+                        for cx, cy in captured_positions:
+                            self.clear_positional(self.state.chessplus_mutations, (cx, cy))
+                            self.clear_positional(self.state.chessplus_clones, (cx, cy))
+                            self.clear_positional(self.state.chessplus_burning, (cx, cy))
+                    else:
+                        self.clear_positional(self.state.chessplus_mutations, to)
+                        self.clear_positional(self.state.chessplus_clones, to)
+                        self.clear_positional(self.state.chessplus_burning, to)
                     # moving piece carries some statuses
-                    self.clear_positional(self.state.chessplus_burning, frm)
+                    if moving_cells_before:
+                        for cx, cy in moving_cells_before:
+                            self.clear_positional(self.state.chessplus_burning, (cx, cy))
+                    else:
+                        self.clear_positional(self.state.chessplus_burning, frm)
                     self.move_positional(self.state.chessplus_mutations, frm, to)
                     self.move_positional(self.state.chessplus_clones, frm, to)
 
@@ -544,15 +703,24 @@ class Room:
                     self.advance_temporary_effects()
                     full_move_completed = (self.move_count % 2 == 0)
                     self.advance_chessplus_effects(full_move_completed)
-                    self.apply_chessplus_cell_effects(to[0], to[1])
-                    if self.is_pack_active("minesweeper") and self.state.board.get_piece(to[0], to[1]) is not None:
-                        if self.state.mines[to[1]][to[0]] == 1:
-                            self.log_event("Explosion", "tile", self.coord_to_alg((to[0], to[1])), extra="mine")
-                        reveal_cell(self.state, to[0], to[1])
+                    moving_cells_after = []
+                    if moving_piece and hasattr(self.state.board, "iter_piece_cells"):
+                        moving_cells_after = self.state.board.iter_piece_cells(moving_piece)
+                    if not moving_cells_after:
+                        moving_cells_after = [to]
+                    for cx, cy in moving_cells_after:
+                        self.apply_chessplus_cell_effects(cx, cy)
+                    if self.is_pack_active("minesweeper"):
+                        for cx, cy in moving_cells_after:
+                            if self.state.board.get_piece(cx, cy) is not None:
+                                if self.state.mines[cy][cx] == 1:
+                                    self.log_event("Explosion", "tile", self.coord_to_alg((cx, cy)), extra="mine")
+                                reveal_cell(self.state, cx, cy)
 
                     newly_activated = self.check_activate_packs()
                     self.advance_pack_lifetimes(full_move_completed)
                     self.advance_pack_effects(current_color=color, skip_pack_ids=newly_activated)
+                    self.apply_chaos_after_action(action_type="move")
                     winner, reason = check_royal_elimination(self.state)
                     if winner:
                         self.broadcast_state()
@@ -623,28 +791,28 @@ class Room:
         if not self.state.dlc_packs:
             return newly
         while full_moves >= self.next_pack_activation:
-            pack_state = None
-            pack_count = len(self.state.dlc_packs)
-            for offset in range(pack_count):
-                idx = (self.next_pack_index + offset) % pack_count
-                candidate = self.state.dlc_packs[idx]
-                if not candidate.get("active"):
-                    pack_state = candidate
-                    self.next_pack_index = (idx + 1) % pack_count
-                    break
+            inactive = [p for p in self.state.dlc_packs if not p.get("active")]
+            pack_state = random.choice(inactive) if inactive else None
             if pack_state:
                 pack_def = self.pack_def_by_id.get(pack_state.get("id")) or get_pack_def(pack_state.get("id"))
                 if pack_def:
                     activate_pack(pack_state, pack_def)
+                    if self.chaos_level() >= 60:
+                        pack_state["next_effect_in"] = 1
                     newly.append(pack_state.get("id"))
                     self.broadcast_popup(pack_state.get("name"), "Активація", pack_state.get("id"))
                     self.note_pack_event(pack_state.get("name"), "Активація", pack_id=pack_state.get("id"))
-            self.next_pack_activation += 5
+            self.next_pack_activation += self.pack_activation_step()
+        if self.chaos_level() >= 40:
+            newly += self.ensure_min_active_packs(2)
+        if newly:
+            self.refresh_extra_piece_types()
         return newly
 
     def advance_pack_lifetimes(self, full_move_completed=False):
         if not full_move_completed:
             return
+        changed = False
         for pack_state in self.state.dlc_packs:
             if not pack_state.get("active"):
                 continue
@@ -654,12 +822,17 @@ class Room:
                 pack_state["next_effect_in"] = None
                 self.broadcast_popup(pack_state.get("name"), "Деактивація", pack_state.get("id"))
                 self.note_pack_event(pack_state.get("name"), "Деактивація", pack_id=pack_state.get("id"))
+                changed = True
+        if changed:
+            self.refresh_extra_piece_types()
 
     def advance_pack_effects(self, current_color, skip_pack_ids=None):
         if skip_pack_ids is None:
             skip_pack_ids = set()
         else:
             skip_pack_ids = set(skip_pack_ids)
+        chaos = self.chaos_level()
+        min_interval = 1 if chaos >= 60 else None
         for pack_state in self.state.dlc_packs:
             if not pack_state.get("active"):
                 continue
@@ -674,14 +847,14 @@ class Room:
                 continue
             pack_def = self.pack_def_by_id.get(pack_state.get("id")) or get_pack_def(pack_state.get("id"))
             if not pack_def:
-                pack_state["next_effect_in"] = random.randint(1, 2)
+                pack_state["next_effect_in"] = min_interval or random.randint(1, 2)
                 continue
-            eff_def, eff_state = choose_effect(pack_state, pack_def)
+            eff_def, eff_state = choose_effect(pack_state, pack_def, chaos=chaos)
             if not eff_def or not eff_state:
                 pack_state["next_effect_in"] = None
                 continue
             eff_state["remaining"] = max(0, (eff_state.get("remaining") or 0) - 1)
-            pack_state["next_effect_in"] = random.randint(1, 2)
+            pack_state["next_effect_in"] = min_interval or random.randint(1, 2)
 
             if eff_def.get("is_item"):
                 item = make_item(eff_def)
@@ -695,9 +868,12 @@ class Room:
                     if conn:
                         self.send_popup_to_client(conn, "Інвентар заповнений", "Предмет не додано")
             else:
-                result = apply_effect(eff_def, self.state)
-                self.broadcast_popup(pack_state.get("name"), eff_def.get("name"), pack_state.get("id"))
-                self.note_pack_event(pack_state.get("name"), eff_def.get("name"), pack_id=pack_state.get("id"), effect_id=eff_def.get("id"))
+                result = apply_effect(eff_def, self.state, current_color=current_color)
+                popup_text = eff_def.get("name")
+                if isinstance(result, dict) and result.get("popup"):
+                    popup_text = result.get("popup")
+                self.broadcast_popup(pack_state.get("name"), popup_text, pack_state.get("id"))
+                self.note_pack_event(pack_state.get("name"), popup_text, pack_id=pack_state.get("id"), effect_id=eff_def.get("id"))
                 if isinstance(result, dict):
                     event = result.get("event")
                     if isinstance(event, dict):
@@ -796,13 +972,20 @@ class Room:
         piece = self.state.board.get_piece(x, y)
         if piece is None:
             return False
+        cells = []
+        if hasattr(self.state.board, "iter_piece_cells"):
+            cells = self.state.board.iter_piece_cells(piece)
         if piece.is_royal:
             if piece.color in self.state.royal_counts:
                 self.state.royal_counts[piece.color] -= 1
-        self.state.board.set_piece(x, y, None)
-        self.clear_positional(self.state.chessplus_mutations, (x, y))
-        self.clear_positional(self.state.chessplus_clones, (x, y))
-        self.clear_positional(self.state.chessplus_burning, (x, y))
+        if hasattr(self.state.board, "clear_piece"):
+            self.state.board.clear_piece(x, y)
+        else:
+            self.state.board.set_piece(x, y, None)
+        for cx, cy in cells or [(x, y)]:
+            self.clear_positional(self.state.chessplus_mutations, (cx, cy))
+            self.clear_positional(self.state.chessplus_clones, (cx, cy))
+            self.clear_positional(self.state.chessplus_burning, (cx, cy))
         return True
 
     def get_cell_effect(self, x, y):
@@ -940,12 +1123,28 @@ class Room:
             return "mutated"
 
     def trigger_swap(self):
-        pieces = [(x, y) for y in range(8) for x in range(8) if self.state.board.get_piece(x, y)]
+        pieces = []
+        seen = set()
+        for y in range(8):
+            for x in range(8):
+                p = self.state.board.get_piece(x, y)
+                if not p:
+                    continue
+                key = getattr(p, "gid", None)
+                if key is None:
+                    key = id(p)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if getattr(p, "size", 1) > 1:
+                    continue
+                anchor = self.state.board.find_piece_anchor(p) if hasattr(self.state.board, "find_piece_anchor") else (x, y)
+                if anchor is None:
+                    anchor = (x, y)
+                pieces.append((anchor, p))
         if len(pieces) < 2:
             return None
-        a, b = random.sample(pieces, 2)
-        pa = self.state.board.get_piece(*a)
-        pb = self.state.board.get_piece(*b)
+        (a, pa), (b, pb) = random.sample(pieces, 2)
         self.state.board.set_piece(a[0], a[1], pb)
         self.state.board.set_piece(b[0], b[1], pa)
         self.swap_positional(self.state.chessplus_mutations, a, b)
@@ -1181,6 +1380,7 @@ class Room:
             send_json(conn, {"type":"error", "msg":"item_missing"})
             return
         effect_id = item.get("effect_id")
+        self.begin_chaos_action()
         if effect_id == "ms_item_place_mine":
             if not target or len(target) != 2:
                 send_json(conn, {"type":"error", "msg":"item_requires_target"})
@@ -1192,6 +1392,8 @@ class Room:
             self.log_event("PlaceMine", "tile", self.coord_to_alg((x, y)))
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("minesweeper"), item.get("name"), "minesweeper")
+            self.mark_chaos_item()
+            self.apply_chaos_after_action(action_type="item")
             self.broadcast_state()
             return
         if effect_id == "ms_item_reveal_explode":
@@ -1206,6 +1408,8 @@ class Room:
             self.state.mine_vision[color] = 0
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("minesweeper"), item.get("name"), "minesweeper")
+            self.mark_chaos_item()
+            self.apply_chaos_after_action(action_type="item")
             winner, reason = check_royal_elimination(self.state)
             if winner:
                 self.broadcast_state()
@@ -1231,22 +1435,41 @@ class Room:
             if not piece or piece.color != color:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
-            if self.state.board.get_piece(tx, ty) is not None:
+            anchor = self.state.board.find_piece_anchor(piece) if hasattr(self.state.board, "find_piece_anchor") else (sx, sy)
+            if anchor is not None:
+                sx, sy = anchor
+            size = max(1, int(getattr(piece, "size", 1)))
+            if not (0 <= tx < 8 and 0 <= ty < 8 and 0 <= tx + size - 1 < 8 and 0 <= ty + size - 1 < 8):
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
+            for yy in range(size):
+                for xx in range(size):
+                    if self.state.board.get_piece(tx + xx, ty + yy) is not None:
+                        send_json(conn, {"type":"error", "msg":"invalid_target"})
+                        return
             teleport_ref = f"{self.piece_short(piece)} {self.coord_to_alg((sx, sy))}->{self.coord_to_alg((tx, ty))}"
             self.clear_positional(self.state.chessplus_burning, (sx, sy))
             self.move_positional(self.state.chessplus_mutations, (sx, sy), (tx, ty))
             self.move_positional(self.state.chessplus_clones, (sx, sy), (tx, ty))
             self.state.board.move_piece((sx, sy), (tx, ty))
             self.log_event("Teleport", "piece", teleport_ref)
-            self.apply_chessplus_cell_effects(tx, ty)
-            if self.is_pack_active("minesweeper") and self.state.board.get_piece(tx, ty) is not None:
-                if self.state.mines[ty][tx] == 1:
-                    self.log_event("Explosion", "tile", self.coord_to_alg((tx, ty)), extra="mine")
-                reveal_cell(self.state, tx, ty)
+            moved_cells = []
+            if hasattr(self.state.board, "iter_piece_cells"):
+                moved_cells = self.state.board.iter_piece_cells(piece)
+            if not moved_cells:
+                moved_cells = [(tx, ty)]
+            for cx, cy in moved_cells:
+                self.apply_chessplus_cell_effects(cx, cy)
+            if self.is_pack_active("minesweeper"):
+                for cx, cy in moved_cells:
+                    if self.state.board.get_piece(cx, cy) is not None:
+                        if self.state.mines[cy][cx] == 1:
+                            self.log_event("Explosion", "tile", self.coord_to_alg((cx, cy)), extra="mine")
+                        reveal_cell(self.state, cx, cy)
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.mark_chaos_item()
+            self.apply_chaos_after_action(action_type="item")
             winner, reason = check_royal_elimination(self.state)
             if winner:
                 self.broadcast_state()
@@ -1272,6 +1495,9 @@ class Room:
             if not piece or piece.color != color:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
+            anchor = self.state.board.find_piece_anchor(piece) if hasattr(self.state.board, "find_piece_anchor") else (sx, sy)
+            if anchor is not None:
+                sx, sy = anchor
             dx = tx - sx
             dy = ty - sy
             if dx == 0 and dy == 0:
@@ -1309,6 +1535,8 @@ class Room:
                 self.log_event("Pistol", "piece", shooter_ref, extra=f"hit:{hit_ref}")
             else:
                 self.log_event("Pistol", "piece", shooter_ref, extra="miss")
+            self.mark_chaos_item()
+            self.apply_chaos_after_action(action_type="item")
             if hit:
                 winner, reason = check_royal_elimination(self.state)
                 if winner:
@@ -1333,12 +1561,17 @@ class Room:
             if not piece or piece.color != color:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
+            anchor = self.state.board.find_piece_anchor(piece) if hasattr(self.state.board, "find_piece_anchor") else (sx, sy)
+            if anchor is not None:
+                sx, sy = anchor
             nukes = getattr(self.state, "chessplus_nukes", [])
             nukes.append({"center": [sx, sy], "timer": 5})
             self.state.chessplus_nukes = nukes
             self.log_event("Nuke", "board", self.coord_to_alg((sx, sy)), extra="armed")
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.mark_chaos_item()
+            self.apply_chaos_after_action(action_type="item")
             self.broadcast_state()
             return
         if effect_id == "cp_item_clone":
@@ -1355,19 +1588,28 @@ class Room:
             if not (0 <= sx < 8 and 0 <= sy < 8 and 0 <= tx < 8 and 0 <= ty < 8):
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
-            if max(abs(tx - sx), abs(ty - sy)) != 1:
-                send_json(conn, {"type":"error", "msg":"invalid_target"})
-                return
             piece = self.state.board.get_piece(sx, sy)
             if not piece or piece.color != color:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
-            if self.state.board.get_piece(tx, ty) is not None:
+            anchor = self.state.board.find_piece_anchor(piece) if hasattr(self.state.board, "find_piece_anchor") else (sx, sy)
+            if anchor is not None:
+                sx, sy = anchor
+            if max(abs(tx - sx), abs(ty - sy)) != 1:
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
-            if self.get_cell_effect(tx, ty) is not None:
+            size = max(1, int(getattr(piece, "size", 1)))
+            if not (0 <= tx < 8 and 0 <= ty < 8 and 0 <= tx + size - 1 < 8 and 0 <= ty + size - 1 < 8):
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
+            for yy in range(size):
+                for xx in range(size):
+                    if self.state.board.get_piece(tx + xx, ty + yy) is not None:
+                        send_json(conn, {"type":"error", "msg":"invalid_target"})
+                        return
+                    if self.get_cell_effect(tx + xx, ty + yy) is not None:
+                        send_json(conn, {"type":"error", "msg":"invalid_target"})
+                        return
             if not clone_piece(self.state, (sx, sy), (tx, ty)):
                 send_json(conn, {"type":"error", "msg":"invalid_target"})
                 return
@@ -1376,6 +1618,8 @@ class Room:
             self.log_event("Clone", "piece", clone_ref)
             self.consume_item(color, slot)
             self.send_popup_to_client(conn, self.pack_title("chessplus"), item.get("name"), "chessplus")
+            self.mark_chaos_item()
+            self.apply_chaos_after_action(action_type="item")
             self.broadcast_state()
             return
         send_json(conn, {"type":"error", "msg":"unknown_item"})

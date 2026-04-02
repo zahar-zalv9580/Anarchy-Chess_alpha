@@ -1,0 +1,591 @@
+{
+  "game_id": 9,
+  "started_at": "2026-04-02T17:40:24",
+  "players": {
+    "white": "Player",
+    "black": "Player"
+  },
+  "events": [
+    {
+      "type": "game_start",
+      "text": "Game started",
+      "players": {
+        "white": "Player",
+        "black": "Player"
+      },
+      "ts": "2026-04-02 17:40:24"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №1 wP f2 -> f4; pack/effect: ні; events: —",
+      "piece": "wP",
+      "from": [
+        5,
+        1
+      ],
+      "to": [
+        5,
+        3
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 17:40:26",
+      "move": 1
+    },
+    {
+      "type": "move",
+      "text": "[Move] №2 bP d7 -> d6; pack/effect: ні; events: —",
+      "piece": "bP",
+      "from": [
+        3,
+        6
+      ],
+      "to": [
+        3,
+        5
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 17:40:28",
+      "move": 2
+    },
+    {
+      "type": "game_over",
+      "reason": "opponent_left",
+      "winner": "white",
+      "final_move": 2,
+      "final_move_text": "[Move] №2 bP d7 -> d6; pack/effect: ні; events: —",
+      "final_position": {
+        "board": [
+          [
+            {
+              "ptype": "rook",
+              "color": "white"
+            },
+            {
+              "ptype": "knight",
+              "color": "white"
+            },
+            {
+              "ptype": "bishop",
+              "color": "white"
+            },
+            {
+              "ptype": "king",
+              "color": "white"
+            },
+            {
+              "ptype": "queen",
+              "color": "white"
+            },
+            {
+              "ptype": "bishop",
+              "color": "white"
+            },
+            {
+              "ptype": "knight",
+              "color": "white"
+            },
+            {
+              "ptype": "rook",
+              "color": "white"
+            }
+          ],
+          [
+            {
+              "ptype": "pawn",
+              "color": "white"
+            },
+            {
+              "ptype": "pawn",
+              "color": "white"
+            },
+            {
+              "ptype": "pawn",
+              "color": "white"
+            },
+            {
+              "ptype": "pawn",
+              "color": "white"
+            },
+            {
+              "ptype": "pawn",
+              "color": "white"
+            },
+            null,
+            {
+              "ptype": "pawn",
+              "color": "white"
+            },
+            {
+              "ptype": "pawn",
+              "color": "white"
+            }
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            {
+              "ptype": "pawn",
+              "color": "white"
+            },
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            {
+              "ptype": "pawn",
+              "color": "black"
+            },
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "ptype": "pawn",
+              "color": "black"
+            },
+            {
+              "ptype": "pawn",
+              "color": "black"
+            },
+            {
+              "ptype": "pawn",
+              "color": "black"
+            },
+            null,
+            {
+              "ptype": "pawn",
+              "color": "black"
+            },
+            {
+              "ptype": "pawn",
+              "color": "black"
+            },
+            {
+              "ptype": "pawn",
+              "color": "black"
+            },
+            {
+              "ptype": "pawn",
+              "color": "black"
+            }
+          ],
+          [
+            {
+              "ptype": "rook",
+              "color": "black"
+            },
+            {
+              "ptype": "knight",
+              "color": "black"
+            },
+            {
+              "ptype": "bishop",
+              "color": "black"
+            },
+            {
+              "ptype": "king",
+              "color": "black"
+            },
+            {
+              "ptype": "queen",
+              "color": "black"
+            },
+            {
+              "ptype": "bishop",
+              "color": "black"
+            },
+            {
+              "ptype": "knight",
+              "color": "black"
+            },
+            {
+              "ptype": "rook",
+              "color": "black"
+            }
+          ]
+        ],
+        "mines": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "revealed": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "adj_counts": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "craters": [],
+        "chessplus_cells": [
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        ],
+        "chessplus_walls": [],
+        "chessplus_bombs": {},
+        "chessplus_void": {
+          "cells": [],
+          "next_expand": 0
+        },
+        "chessplus_mutations": {},
+        "chessplus_clones": {},
+        "chessplus_nukes": []
+      },
+      "final_score": {
+        "royals": {
+          "white": 2,
+          "black": 2
+        },
+        "material": {
+          "white": 39,
+          "black": 39
+        }
+      },
+      "comment": "Кінець гри: Суперник вийшов. Переможець: білий. Рахунок: королівські 2-2, матеріал 39-39.",
+      "text": "Game over: opponent_left (white)",
+      "ts": "2026-04-02 17:40:31"
+    }
+  ]
+}

@@ -1,0 +1,1752 @@
+{
+  "game_id": 14,
+  "started_at": "2026-04-02T19:11:37",
+  "players": {
+    "white": "Player",
+    "black": "Player"
+  },
+  "events": [
+    {
+      "type": "game_start",
+      "text": "Game started",
+      "players": {
+        "white": "Player",
+        "black": "Player"
+      },
+      "ts": "2026-04-02 19:11:37"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №1 wP f2 -> f4; pack/effect: ні; events: —",
+      "piece": "wP",
+      "from": [
+        5,
+        1
+      ],
+      "to": [
+        5,
+        3
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:11:39",
+      "move": 1
+    },
+    {
+      "type": "move",
+      "text": "[Move] №2 bP d7 -> d5; pack/effect: ні; events: —",
+      "piece": "bP",
+      "from": [
+        3,
+        6
+      ],
+      "to": [
+        3,
+        4
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:11:43",
+      "move": 2
+    },
+    {
+      "type": "move",
+      "text": "[Move] №3 wN g1 -> f3; pack/effect: ні; events: —",
+      "piece": "wN",
+      "from": [
+        6,
+        0
+      ],
+      "to": [
+        5,
+        2
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:11:45",
+      "move": 3
+    },
+    {
+      "type": "move",
+      "text": "[Move] №4 bN b8 -> c6; pack/effect: ні; events: —",
+      "piece": "bN",
+      "from": [
+        1,
+        7
+      ],
+      "to": [
+        2,
+        5
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:11:47",
+      "move": 4
+    },
+    {
+      "type": "move",
+      "text": "[Move] №5 wP b2 -> b3; pack/effect: ні; events: —",
+      "piece": "wP",
+      "from": [
+        1,
+        1
+      ],
+      "to": [
+        1,
+        2
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:11:49",
+      "move": 5
+    },
+    {
+      "type": "move",
+      "text": "[Move] №6 bN g8 -> f6; pack/effect: ні; events: —",
+      "piece": "bN",
+      "from": [
+        6,
+        7
+      ],
+      "to": [
+        5,
+        5
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:11:52",
+      "move": 6
+    },
+    {
+      "type": "move",
+      "text": "[Move] №7 wB c1 -> b2; pack/effect: ні; events: —",
+      "piece": "wB",
+      "from": [
+        2,
+        0
+      ],
+      "to": [
+        1,
+        1
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:11:54",
+      "move": 7
+    },
+    {
+      "type": "move",
+      "text": "[Move] №8 bB c8 -> g4; pack/effect: ні; events: —",
+      "piece": "bB",
+      "from": [
+        2,
+        7
+      ],
+      "to": [
+        6,
+        3
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:11:57",
+      "move": 8
+    },
+    {
+      "type": "move",
+      "text": "[Move] №9 wQ e1 -> g3; pack/effect: ні; events: —",
+      "piece": "wQ",
+      "from": [
+        4,
+        0
+      ],
+      "to": [
+        6,
+        2
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:12:00",
+      "move": 9
+    },
+    {
+      "type": "move",
+      "text": "[Move] №10 bN f6 -> e4; pack/effect: Minesweeper DLC: Активація; events: —",
+      "piece": "bN",
+      "from": [
+        5,
+        5
+      ],
+      "to": [
+        4,
+        3
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Активація"
+      ],
+      "events": [],
+      "ts": "2026-04-02 19:12:04",
+      "move": 10
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Активація",
+      "effect_id": null,
+      "text": "Minesweeper DLC: Активація",
+      "ts": "2026-04-02 19:12:04",
+      "move": 10
+    },
+    {
+      "type": "move",
+      "text": "[Move] №11 wQ g3 -> g4; pack/effect: Minesweeper DLC: Спавн мін (2-5); events: SpawnMines (tile b8,f6,b5,c4 count:4)",
+      "piece": "wQ",
+      "from": [
+        6,
+        2
+      ],
+      "to": [
+        6,
+        3
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн мін (2-5)"
+      ],
+      "events": [
+        "SpawnMines (tile b8,f6,b5,c4 count:4)"
+      ],
+      "ts": "2026-04-02 19:12:07",
+      "move": 11
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн мін (2-5)",
+      "effect_id": "ms_spawn_mines",
+      "text": "Minesweeper DLC: Спавн мін (2-5)",
+      "ts": "2026-04-02 19:12:07",
+      "move": 11
+    },
+    {
+      "type": "event",
+      "name": "SpawnMines",
+      "event_type": "tile",
+      "target": "b8,f6,b5,c4",
+      "extra": "count:4",
+      "text": "SpawnMines (tile b8,f6,b5,c4 count:4)",
+      "ts": "2026-04-02 19:12:07",
+      "move": 11
+    },
+    {
+      "type": "move",
+      "text": "[Move] №12 bP b7 -> b6; pack/effect: Minesweeper DLC: Спавн міни; events: SpawnMine (tile e3 count:1)",
+      "piece": "bP",
+      "from": [
+        1,
+        6
+      ],
+      "to": [
+        1,
+        5
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн міни"
+      ],
+      "events": [
+        "SpawnMine (tile e3 count:1)"
+      ],
+      "ts": "2026-04-02 19:12:11",
+      "move": 12
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн міни",
+      "effect_id": "ms_spawn_mine",
+      "text": "Minesweeper DLC: Спавн міни",
+      "ts": "2026-04-02 19:12:11",
+      "move": 12
+    },
+    {
+      "type": "event",
+      "name": "SpawnMine",
+      "event_type": "tile",
+      "target": "e3",
+      "extra": "count:1",
+      "text": "SpawnMine (tile e3 count:1)",
+      "ts": "2026-04-02 19:12:11",
+      "move": 12
+    },
+    {
+      "type": "move",
+      "text": "[Move] №13 wN f3 -> d4; pack/effect: ні; events: —",
+      "piece": "wN",
+      "from": [
+        5,
+        2
+      ],
+      "to": [
+        3,
+        3
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:12:17",
+      "move": 13
+    },
+    {
+      "type": "move",
+      "text": "[Move] №14 bQ e8 -> d7; pack/effect: Minesweeper DLC: Спавн міни; events: SpawnMine (tile d3 count:1)",
+      "piece": "bQ",
+      "from": [
+        4,
+        7
+      ],
+      "to": [
+        3,
+        6
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн міни"
+      ],
+      "events": [
+        "SpawnMine (tile d3 count:1)"
+      ],
+      "ts": "2026-04-02 19:12:24",
+      "move": 14
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн міни",
+      "effect_id": "ms_spawn_mine",
+      "text": "Minesweeper DLC: Спавн міни",
+      "ts": "2026-04-02 19:12:24",
+      "move": 14
+    },
+    {
+      "type": "event",
+      "name": "SpawnMine",
+      "event_type": "tile",
+      "target": "d3",
+      "extra": "count:1",
+      "text": "SpawnMine (tile d3 count:1)",
+      "ts": "2026-04-02 19:12:24",
+      "move": 14
+    },
+    {
+      "type": "move",
+      "text": "[Move] №15 wN d4 -> c6; pack/effect: ні; events: —",
+      "piece": "wN",
+      "from": [
+        3,
+        3
+      ],
+      "to": [
+        2,
+        5
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:12:28",
+      "move": 15
+    },
+    {
+      "type": "move",
+      "text": "[Move] №16 bQ d7 -> g4; pack/effect: Minesweeper DLC: Випадковий вибух; events: Explosion (tile e3 random)",
+      "piece": "bQ",
+      "from": [
+        3,
+        6
+      ],
+      "to": [
+        6,
+        3
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Випадковий вибух"
+      ],
+      "events": [
+        "Explosion (tile e3 random)"
+      ],
+      "ts": "2026-04-02 19:12:31",
+      "move": 16
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Випадковий вибух",
+      "effect_id": "ms_explode_random",
+      "text": "Minesweeper DLC: Випадковий вибух",
+      "ts": "2026-04-02 19:12:31",
+      "move": 16
+    },
+    {
+      "type": "event",
+      "name": "Explosion",
+      "event_type": "tile",
+      "target": "e3",
+      "extra": "random",
+      "text": "Explosion (tile e3 random)",
+      "ts": "2026-04-02 19:12:31",
+      "move": 16
+    },
+    {
+      "type": "move",
+      "text": "[Move] №17 wB f1 -> e2; pack/effect: ні; events: —",
+      "piece": "wB",
+      "from": [
+        5,
+        0
+      ],
+      "to": [
+        4,
+        1
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:12:35",
+      "move": 17
+    },
+    {
+      "type": "move",
+      "text": "[Move] №18 bQ g4 -> e2; pack/effect: Minesweeper DLC: Спавн мін (2-5); events: SpawnMines (tile c4,d7,h5,f2 count:4)",
+      "piece": "bQ",
+      "from": [
+        6,
+        3
+      ],
+      "to": [
+        4,
+        1
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн мін (2-5)"
+      ],
+      "events": [
+        "SpawnMines (tile c4,d7,h5,f2 count:4)"
+      ],
+      "ts": "2026-04-02 19:12:37",
+      "move": 18
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн мін (2-5)",
+      "effect_id": "ms_spawn_mines",
+      "text": "Minesweeper DLC: Спавн мін (2-5)",
+      "ts": "2026-04-02 19:12:37",
+      "move": 18
+    },
+    {
+      "type": "event",
+      "name": "SpawnMines",
+      "event_type": "tile",
+      "target": "c4,d7,h5,f2",
+      "extra": "count:4",
+      "text": "SpawnMines (tile c4,d7,h5,f2 count:4)",
+      "ts": "2026-04-02 19:12:37",
+      "move": 18
+    },
+    {
+      "type": "move",
+      "text": "[Move] №19 wK d1 -> e2; pack/effect: Minesweeper DLC: Показати та підірвати міну; events: —",
+      "piece": "wK",
+      "from": [
+        3,
+        0
+      ],
+      "to": [
+        4,
+        1
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Показати та підірвати міну"
+      ],
+      "events": [],
+      "ts": "2026-04-02 19:12:38",
+      "move": 19
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Показати та підірвати міну",
+      "effect_id": "ms_item_reveal_explode",
+      "text": "Minesweeper DLC: Показати та підірвати міну",
+      "ts": "2026-04-02 19:12:38",
+      "move": 19
+    },
+    {
+      "type": "move",
+      "text": "[Move] №20 bP e7 -> e5; pack/effect: Pieces Expansion DLC: Активація; events: —",
+      "piece": "bP",
+      "from": [
+        4,
+        6
+      ],
+      "to": [
+        4,
+        4
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Активація"
+      ],
+      "events": [],
+      "ts": "2026-04-02 19:12:46",
+      "move": 20
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Активація",
+      "effect_id": null,
+      "text": "Pieces Expansion DLC: Активація",
+      "ts": "2026-04-02 19:12:46",
+      "move": 20
+    },
+    {
+      "type": "event",
+      "name": "Explosion",
+      "event_type": "tile",
+      "target": "c4",
+      "extra": "item",
+      "text": "Explosion (tile c4 item)",
+      "ts": "2026-04-02 19:12:50"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №21 wN b1 -> c3; pack/effect: Minesweeper DLC: Поставити міну; Pieces Expansion DLC: Зміна: Верблюд; events: ChangePiece (piece g7 black:pawn->camel)",
+      "piece": "wN",
+      "from": [
+        1,
+        0
+      ],
+      "to": [
+        2,
+        2
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Поставити міну",
+        "Pieces Expansion DLC: Зміна: Верблюд"
+      ],
+      "events": [
+        "ChangePiece (piece g7 black:pawn->camel)"
+      ],
+      "ts": "2026-04-02 19:12:58",
+      "move": 21
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Поставити міну",
+      "effect_id": "ms_item_place_mine",
+      "text": "Minesweeper DLC: Поставити міну",
+      "ts": "2026-04-02 19:12:58",
+      "move": 21
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Зміна: Верблюд",
+      "effect_id": "pe_change_piece",
+      "text": "Pieces Expansion DLC: Зміна: Верблюд",
+      "ts": "2026-04-02 19:12:58",
+      "move": 21
+    },
+    {
+      "type": "event",
+      "name": "ChangePiece",
+      "event_type": "piece",
+      "target": "g7",
+      "extra": "black:pawn->camel",
+      "text": "ChangePiece (piece g7 black:pawn->camel)",
+      "ts": "2026-04-02 19:12:58",
+      "move": 21
+    },
+    {
+      "type": "move",
+      "text": "[Move] №22 bC g7 -> f4; pack/effect: ні; events: —",
+      "piece": "bC",
+      "from": [
+        6,
+        6
+      ],
+      "to": [
+        5,
+        3
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:13:27",
+      "move": 22
+    },
+    {
+      "type": "move",
+      "text": "[Move] №23 wN c3 -> d5; pack/effect: Minesweeper DLC: Відкрити числа; Pieces Expansion DLC: Зміна: Верблюд; events: RevealNumbers (board e3,f1,b7,c6,e8,f3,g1,g4,h4,g2,g7,g6,f7,g5 count:14), ChangePiece (piece h8 black:rook->camel)",
+      "piece": "wN",
+      "from": [
+        2,
+        2
+      ],
+      "to": [
+        3,
+        4
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Відкрити числа",
+        "Pieces Expansion DLC: Зміна: Верблюд"
+      ],
+      "events": [
+        "RevealNumbers (board e3,f1,b7,c6,e8,f3,g1,g4,h4,g2,g7,g6,f7,g5 count:14)",
+        "ChangePiece (piece h8 black:rook->camel)"
+      ],
+      "ts": "2026-04-02 19:13:35",
+      "move": 23
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Відкрити числа",
+      "effect_id": "ms_reveal_numbers",
+      "text": "Minesweeper DLC: Відкрити числа",
+      "ts": "2026-04-02 19:13:35",
+      "move": 23
+    },
+    {
+      "type": "event",
+      "name": "RevealNumbers",
+      "event_type": "board",
+      "target": "e3,f1,b7,c6,e8,f3,g1,g4,h4,g2,g7,g6,f7,g5",
+      "extra": "count:14",
+      "text": "RevealNumbers (board e3,f1,b7,c6,e8,f3,g1,g4,h4,g2,g7,g6,f7,g5 count:14)",
+      "ts": "2026-04-02 19:13:35",
+      "move": 23
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Зміна: Верблюд",
+      "effect_id": "pe_change_piece",
+      "text": "Pieces Expansion DLC: Зміна: Верблюд",
+      "ts": "2026-04-02 19:13:35",
+      "move": 23
+    },
+    {
+      "type": "event",
+      "name": "ChangePiece",
+      "event_type": "piece",
+      "target": "h8",
+      "extra": "black:rook->camel",
+      "text": "ChangePiece (piece h8 black:rook->camel)",
+      "ts": "2026-04-02 19:13:35",
+      "move": 23
+    },
+    {
+      "type": "move",
+      "text": "[Move] №24 bC h8 -> g5; pack/effect: Minesweeper DLC: Поставити міну; events: —",
+      "piece": "bC",
+      "from": [
+        7,
+        7
+      ],
+      "to": [
+        6,
+        4
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Поставити міну"
+      ],
+      "events": [],
+      "ts": "2026-04-02 19:13:39",
+      "move": 24
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Поставити міну",
+      "effect_id": "ms_item_place_mine",
+      "text": "Minesweeper DLC: Поставити міну",
+      "ts": "2026-04-02 19:13:39",
+      "move": 24
+    },
+    {
+      "type": "event",
+      "name": "PlaceMine",
+      "event_type": "tile",
+      "target": "b5",
+      "extra": null,
+      "text": "PlaceMine (tile b5)",
+      "ts": "2026-04-02 19:13:42"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №25 wK e2 -> e3; pack/effect: Minesweeper DLC: Поставити міну; Pieces Expansion DLC: Спавн: Тура; events: SpawnPiece (piece d1 white:rook)",
+      "piece": "wK",
+      "from": [
+        4,
+        1
+      ],
+      "to": [
+        4,
+        2
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Поставити міну",
+        "Pieces Expansion DLC: Спавн: Тура"
+      ],
+      "events": [
+        "SpawnPiece (piece d1 white:rook)"
+      ],
+      "ts": "2026-04-02 19:13:48",
+      "move": 25
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Поставити міну",
+      "effect_id": "ms_item_place_mine",
+      "text": "Minesweeper DLC: Поставити міну",
+      "ts": "2026-04-02 19:13:48",
+      "move": 25
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Спавн: Тура",
+      "effect_id": "pe_spawn_piece",
+      "text": "Pieces Expansion DLC: Спавн: Тура",
+      "ts": "2026-04-02 19:13:48",
+      "move": 25
+    },
+    {
+      "type": "event",
+      "name": "SpawnPiece",
+      "event_type": "piece",
+      "target": "d1",
+      "extra": "white:rook",
+      "text": "SpawnPiece (piece d1 white:rook)",
+      "ts": "2026-04-02 19:13:48",
+      "move": 25
+    },
+    {
+      "type": "event",
+      "name": "PlaceMine",
+      "event_type": "tile",
+      "target": "d3",
+      "extra": null,
+      "text": "PlaceMine (tile d3)",
+      "ts": "2026-04-02 19:13:54"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №26 bP e5 -> e4; pack/effect: Pieces Expansion DLC: Спавн: Тура; events: SpawnPiece (piece b7 black:rook)",
+      "piece": "bP",
+      "from": [
+        4,
+        4
+      ],
+      "to": [
+        4,
+        3
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Спавн: Тура"
+      ],
+      "events": [
+        "SpawnPiece (piece b7 black:rook)"
+      ],
+      "ts": "2026-04-02 19:13:58",
+      "move": 26
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Спавн: Тура",
+      "effect_id": "pe_spawn_piece",
+      "text": "Pieces Expansion DLC: Спавн: Тура",
+      "ts": "2026-04-02 19:13:58",
+      "move": 26
+    },
+    {
+      "type": "event",
+      "name": "SpawnPiece",
+      "event_type": "piece",
+      "target": "b7",
+      "extra": "black:rook",
+      "text": "SpawnPiece (piece b7 black:rook)",
+      "ts": "2026-04-02 19:13:58",
+      "move": 26
+    },
+    {
+      "type": "event",
+      "name": "PlaceMine",
+      "event_type": "tile",
+      "target": "b4",
+      "extra": null,
+      "text": "PlaceMine (tile b4)",
+      "ts": "2026-04-02 19:14:01"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №27 wK e3 -> f4; pack/effect: ні; events: —",
+      "piece": "wK",
+      "from": [
+        4,
+        2
+      ],
+      "to": [
+        5,
+        3
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:14:08",
+      "move": 27
+    },
+    {
+      "type": "move",
+      "text": "[Move] №28 bB f8 -> c5; pack/effect: Minesweeper DLC: Деактивація; Pieces Expansion DLC: Спавн: Амазон; events: SpawnPiece (piece g8 black:amazon)",
+      "piece": "bB",
+      "from": [
+        5,
+        7
+      ],
+      "to": [
+        2,
+        4
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Деактивація",
+        "Pieces Expansion DLC: Спавн: Амазон"
+      ],
+      "events": [
+        "SpawnPiece (piece g8 black:amazon)"
+      ],
+      "ts": "2026-04-02 19:14:12",
+      "move": 28
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Деактивація",
+      "effect_id": null,
+      "text": "Minesweeper DLC: Деактивація",
+      "ts": "2026-04-02 19:14:12",
+      "move": 28
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Спавн: Амазон",
+      "effect_id": "pe_spawn_piece",
+      "text": "Pieces Expansion DLC: Спавн: Амазон",
+      "ts": "2026-04-02 19:14:12",
+      "move": 28
+    },
+    {
+      "type": "event",
+      "name": "SpawnPiece",
+      "event_type": "piece",
+      "target": "g8",
+      "extra": "black:amazon",
+      "text": "SpawnPiece (piece g8 black:amazon)",
+      "ts": "2026-04-02 19:14:12",
+      "move": 28
+    },
+    {
+      "type": "move",
+      "text": "[Move] №29 wB b2 -> f6; pack/effect: ні; events: —",
+      "piece": "wB",
+      "from": [
+        1,
+        1
+      ],
+      "to": [
+        5,
+        5
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:14:29",
+      "move": 29
+    },
+    {
+      "type": "move",
+      "text": "[Move] №30 bC g5 -> f2; pack/effect: Chess+ DLC: Активація; events: —",
+      "piece": "bC",
+      "from": [
+        6,
+        4
+      ],
+      "to": [
+        5,
+        1
+      ],
+      "pack_effects": [
+        "Chess+ DLC: Активація"
+      ],
+      "events": [],
+      "ts": "2026-04-02 19:14:36",
+      "move": 30
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Активація",
+      "effect_id": null,
+      "text": "Chess+ DLC: Активація",
+      "ts": "2026-04-02 19:14:36",
+      "move": 30
+    },
+    {
+      "type": "move",
+      "text": "[Move] №31 wK f4 -> e4; pack/effect: Chess+ DLC: Безодня; events: Void (tile b6 spawn)",
+      "piece": "wK",
+      "from": [
+        5,
+        3
+      ],
+      "to": [
+        4,
+        3
+      ],
+      "pack_effects": [
+        "Chess+ DLC: Безодня"
+      ],
+      "events": [
+        "Void (tile b6 spawn)"
+      ],
+      "ts": "2026-04-02 19:14:40",
+      "move": 31
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Безодня",
+      "effect_id": "cp_void",
+      "text": "Chess+ DLC: Безодня",
+      "ts": "2026-04-02 19:14:40",
+      "move": 31
+    },
+    {
+      "type": "event",
+      "name": "Void",
+      "event_type": "tile",
+      "target": "b6",
+      "extra": "spawn",
+      "text": "Void (tile b6 spawn)",
+      "ts": "2026-04-02 19:14:40",
+      "move": 31
+    },
+    {
+      "type": "move",
+      "text": "[Move] №32 bA g8 -> g2; pack/effect: ні; events: —",
+      "piece": "bA",
+      "from": [
+        6,
+        7
+      ],
+      "to": [
+        6,
+        1
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-02 19:14:44",
+      "move": 32
+    },
+    {
+      "type": "move",
+      "text": "[Move] №33 wR h1 -> g1; pack/effect: Chess+ DLC: Клітинка-кубик; events: DiceTile (tile g3 count:1)",
+      "piece": "wR",
+      "from": [
+        7,
+        0
+      ],
+      "to": [
+        6,
+        0
+      ],
+      "pack_effects": [
+        "Chess+ DLC: Клітинка-кубик"
+      ],
+      "events": [
+        "DiceTile (tile g3 count:1)"
+      ],
+      "ts": "2026-04-02 19:14:46",
+      "move": 33
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Клітинка-кубик",
+      "effect_id": "cp_dice_tile",
+      "text": "Chess+ DLC: Клітинка-кубик",
+      "ts": "2026-04-02 19:14:46",
+      "move": 33
+    },
+    {
+      "type": "event",
+      "name": "DiceTile",
+      "event_type": "tile",
+      "target": "g3",
+      "extra": "count:1",
+      "text": "DiceTile (tile g3 count:1)",
+      "ts": "2026-04-02 19:14:46",
+      "move": 33
+    },
+    {
+      "type": "move",
+      "text": "[Move] №34 bA g2 -> h2; pack/effect: Chess+ DLC: Мутації пішаків; events: PawnMutation (piece c7,a7 count:2)",
+      "piece": "bA",
+      "from": [
+        6,
+        1
+      ],
+      "to": [
+        7,
+        1
+      ],
+      "pack_effects": [
+        "Chess+ DLC: Мутації пішаків"
+      ],
+      "events": [
+        "PawnMutation (piece c7,a7 count:2)"
+      ],
+      "ts": "2026-04-02 19:15:02",
+      "move": 34
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Мутації пішаків",
+      "effect_id": "cp_pawn_mutation",
+      "text": "Chess+ DLC: Мутації пішаків",
+      "ts": "2026-04-02 19:15:02",
+      "move": 34
+    },
+    {
+      "type": "event",
+      "name": "PawnMutation",
+      "event_type": "piece",
+      "target": "c7,a7",
+      "extra": "count:2",
+      "text": "PawnMutation (piece c7,a7 count:2)",
+      "ts": "2026-04-02 19:15:02",
+      "move": 34
+    },
+    {
+      "type": "move",
+      "text": "[Move] №35 wR d1 -> f1; pack/effect: Chess+ DLC: Клітинка-обмін; events: SwapTile (tile e2 count:1)",
+      "piece": "wR",
+      "from": [
+        3,
+        0
+      ],
+      "to": [
+        5,
+        0
+      ],
+      "pack_effects": [
+        "Chess+ DLC: Клітинка-обмін"
+      ],
+      "events": [
+        "SwapTile (tile e2 count:1)"
+      ],
+      "ts": "2026-04-02 19:15:07",
+      "move": 35
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Клітинка-обмін",
+      "effect_id": "cp_swap_tile",
+      "text": "Chess+ DLC: Клітинка-обмін",
+      "ts": "2026-04-02 19:15:07",
+      "move": 35
+    },
+    {
+      "type": "event",
+      "name": "SwapTile",
+      "event_type": "tile",
+      "target": "e2",
+      "extra": "count:1",
+      "text": "SwapTile (tile e2 count:1)",
+      "ts": "2026-04-02 19:15:07",
+      "move": 35
+    },
+    {
+      "type": "move",
+      "text": "[Move] №36 bA h2 -> g1; pack/effect: Minesweeper DLC: Активація; events: Void (tile b7 expand)",
+      "piece": "bA",
+      "from": [
+        7,
+        1
+      ],
+      "to": [
+        6,
+        0
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Активація"
+      ],
+      "events": [
+        "Void (tile b7 expand)"
+      ],
+      "ts": "2026-04-02 19:15:11",
+      "move": 36
+    },
+    {
+      "type": "event",
+      "name": "Void",
+      "event_type": "tile",
+      "target": "b7",
+      "extra": "expand",
+      "text": "Void (tile b7 expand)",
+      "ts": "2026-04-02 19:15:11",
+      "move": 36
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Активація",
+      "effect_id": null,
+      "text": "Minesweeper DLC: Активація",
+      "ts": "2026-04-02 19:15:11",
+      "move": 36
+    },
+    {
+      "type": "move",
+      "text": "[Move] №37 wR f1 -> g1; pack/effect: Minesweeper DLC: Випадковий вибух; Chess+ DLC: Клітинка-обмін; events: Explosion (tile d7 random), SwapTile (tile g6 count:1)",
+      "piece": "wR",
+      "from": [
+        5,
+        0
+      ],
+      "to": [
+        6,
+        0
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Випадковий вибух",
+        "Chess+ DLC: Клітинка-обмін"
+      ],
+      "events": [
+        "Explosion (tile d7 random)",
+        "SwapTile (tile g6 count:1)"
+      ],
+      "ts": "2026-04-02 19:15:15",
+      "move": 37
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Випадковий вибух",
+      "effect_id": "ms_explode_random",
+      "text": "Minesweeper DLC: Випадковий вибух",
+      "ts": "2026-04-02 19:15:15",
+      "move": 37
+    },
+    {
+      "type": "event",
+      "name": "Explosion",
+      "event_type": "tile",
+      "target": "d7",
+      "extra": "random",
+      "text": "Explosion (tile d7 random)",
+      "ts": "2026-04-02 19:15:15",
+      "move": 37
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Клітинка-обмін",
+      "effect_id": "cp_swap_tile",
+      "text": "Chess+ DLC: Клітинка-обмін",
+      "ts": "2026-04-02 19:15:15",
+      "move": 37
+    },
+    {
+      "type": "event",
+      "name": "SwapTile",
+      "event_type": "tile",
+      "target": "g6",
+      "extra": "count:1",
+      "text": "SwapTile (tile g6 count:1)",
+      "ts": "2026-04-02 19:15:15",
+      "move": 37
+    },
+    {
+      "type": "game_over",
+      "reason": "royal_captured",
+      "winner": "white",
+      "final_move": 37,
+      "final_move_text": "[Move] №37 wR f1 -> g1; pack/effect: Minesweeper DLC: Випадковий вибух; Chess+ DLC: Клітинка-обмін; events: Explosion (tile d7 random), SwapTile (tile g6 count:1)",
+      "final_position": {
+        "board": [
+          [
+            {
+              "ptype": "rook",
+              "color": "white",
+              "gid": 145
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            {
+              "ptype": "rook",
+              "color": "white",
+              "gid": 161,
+              "anchor": [
+                6,
+                0
+              ]
+            },
+            null
+          ],
+          [
+            {
+              "ptype": "pawn",
+              "color": "white",
+              "gid": 129
+            },
+            null,
+            null,
+            null,
+            null,
+            {
+              "ptype": "camel",
+              "color": "black",
+              "gid": 148,
+              "anchor": [
+                5,
+                1
+              ]
+            },
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            {
+              "ptype": "king",
+              "color": "white",
+              "gid": 157,
+              "anchor": [
+                4,
+                3
+              ]
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            {
+              "ptype": "bishop",
+              "color": "black",
+              "gid": 156,
+              "anchor": [
+                2,
+                4
+              ]
+            },
+            {
+              "ptype": "knight",
+              "color": "white",
+              "gid": 149,
+              "anchor": [
+                3,
+                4
+              ]
+            },
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            {
+              "ptype": "bishop",
+              "color": "white",
+              "gid": 153,
+              "anchor": [
+                5,
+                5
+              ]
+            },
+            null,
+            null
+          ],
+          [
+            {
+              "ptype": "pawn",
+              "color": "black",
+              "gid": 130
+            },
+            null,
+            null,
+            null,
+            null,
+            {
+              "ptype": "pawn",
+              "color": "black",
+              "gid": 140
+            },
+            null,
+            {
+              "ptype": "pawn",
+              "color": "black",
+              "gid": 144
+            }
+          ],
+          [
+            {
+              "ptype": "rook",
+              "color": "black",
+              "gid": 147
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        ],
+        "mines": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "revealed": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "adj_counts": [
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            1,
+            2,
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            2,
+            0,
+            2,
+            1,
+            1,
+            0
+          ],
+          [
+            2,
+            1,
+            3,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            2,
+            0,
+            1,
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "craters": [
+          [
+            4,
+            2
+          ],
+          [
+            1,
+            4
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            6
+          ],
+          [
+            3,
+            2
+          ]
+        ],
+        "chessplus_cells": [
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            "swap",
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "dice",
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            "void",
+            null,
+            null,
+            null,
+            null,
+            "swap",
+            null
+          ],
+          [
+            null,
+            "void",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        ],
+        "chessplus_walls": [],
+        "chessplus_bombs": {},
+        "chessplus_void": {
+          "cells": [
+            [
+              1,
+              5
+            ],
+            [
+              1,
+              6
+            ]
+          ],
+          "next_expand": 2
+        },
+        "chessplus_mutations": {
+          "2,6": "longstep",
+          "0,6": "backstep"
+        },
+        "chessplus_clones": {},
+        "chessplus_nukes": []
+      },
+      "final_score": {
+        "royals": {
+          "white": 1,
+          "black": 0
+        },
+        "material": {
+          "white": 17,
+          "black": 14
+        }
+      },
+      "comment": "Кінець гри: Знищені всі королівські фігури суперника. Переможець: білий. Рахунок: королівські 1-0, матеріал 17-14.",
+      "text": "Game over: royal_captured (white)",
+      "ts": "2026-04-02 19:15:15"
+    }
+  ]
+}

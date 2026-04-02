@@ -1,6 +1,6 @@
 ﻿import random
 from modules.game.board import coord_in_bounds
-from modules.game.pieces import Piece
+from modules.game.pieces import Piece, apply_piece_type, piece_size
 
 STANDARD_PIECES = ["pawn", "knight", "bishop", "rook", "queen"]
 
@@ -161,9 +161,37 @@ def mutate_piece_randomly(state, x, y):
     if not p:
         return None
     pool = get_piece_pool(state)
-    new_type = random.choice(pool)
-    p.ptype = new_type
-    p.is_royal = new_type in ("king", "queen")
+    anchor = state.board.find_piece_anchor(p) if hasattr(state.board, "find_piece_anchor") else (x, y)
+    if anchor is None:
+        anchor = (x, y)
+
+    filtered = []
+    for t in pool:
+        if t == "giant_pawn":
+            size = piece_size(t)
+            ax, ay = anchor
+            if not coord_in_bounds(ax, ay) or not coord_in_bounds(ax + size - 1, ay + size - 1):
+                continue
+            ok = True
+            for dy in range(size):
+                for dx in range(size):
+                    nx, ny = ax + dx, ay + dy
+                    occ = state.board.get_piece(nx, ny)
+                    if occ and occ is not p:
+                        ok = False
+                        break
+                if not ok:
+                    break
+            if not ok:
+                continue
+        filtered.append(t)
+    if not filtered:
+        return None
+    new_type = random.choice(filtered)
+    # rebuild footprint if size changes
+    state.board.clear_piece(anchor[0], anchor[1])
+    apply_piece_type(p, new_type, anchor=anchor)
+    state.board.place_piece(p, anchor)
     return new_type
 
 
@@ -172,10 +200,16 @@ def clone_piece(state, src, dst):
     dx, dy = dst
     if not coord_in_bounds(dx, dy):
         return False
-    if state.board.get_piece(dx, dy) is not None:
-        return False
     p = state.board.get_piece(sx, sy)
     if not p:
         return False
-    state.board.set_piece(dx, dy, Piece(p.ptype, p.color))
+    size = max(1, int(getattr(p, "size", 1)))
+    if not coord_in_bounds(dx + size - 1, dy + size - 1):
+        return False
+    for yy in range(size):
+        for xx in range(size):
+            if state.board.get_piece(dx + xx, dy + yy) is not None:
+                return False
+    new_piece = Piece(p.ptype, p.color, size=size, anchor=(dx, dy))
+    state.board.place_piece(new_piece, (dx, dy))
     return True

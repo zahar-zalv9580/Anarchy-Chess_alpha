@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from modules.game.state import GameState
 from modules.game.rules import validate_move, apply_move
 from modules.game.board import coord_for_pixel, coord_in_bounds
-from modules.game.pieces import Piece
+from modules.game.pieces import Piece, apply_piece_type, piece_size
 from modules.dlc.minesweeper import compute_adj_counts, trigger_mine, clear_reveal_on_mine, reveal_numbers_under_pieces
 from modules.dlc.packs import PACK_DEFS
 import settings as cfg
@@ -63,6 +63,8 @@ class Client:
         self.replay_speed_index = 0
         self.replay_next_time = 0.0
         self.replay_game_rects = {}
+        self.replay_list_offset = 0
+        self.replay_scroll_rects = {}
         self.item_target_phase = None
         self.item_selected_piece = None
         self.last_nuke_event_id = 0
@@ -105,6 +107,9 @@ class Client:
         self.sfx_nuke_charge = None
         self.sfx_nuke_explosion = None
         self.sfx_clone = None
+        self.sfx_chaos_tick = None
+        self.sfx_giant_spawn = None
+        self.chaos_bucket = 0
         self.game_over_buttons = {}
         self.texture_cache = {}
         self.number_cache = {}
@@ -112,6 +117,8 @@ class Client:
         self.timer_sync_time = None
         self.timer_running = False
         self.assets_root = PROJECT_ROOT / "assets"
+        self.inventory_slot_image = None
+        self.inventory_slot_size = None
         self.intro_played = False
         self.intro_start_time = None
         self.intro_duration = cfg.INTRO_DURATION
@@ -132,6 +139,9 @@ class Client:
         self.font_cache = {}
         self.local_ip_cache = None
         self.mine_image = None
+        self.inventory_bar_image = None
+        self.inventory_bar_size = None
+        self.inventory_slot_rects = {}
         self.mine_reveals = []
         self.hint_move_surface = None
         self.hint_capture_surface = None
@@ -180,6 +190,7 @@ class Client:
             "game": 0.6,
             "win": 0.8,
             "lose": 0.8,
+            "chaos": 0.7,
         }
         self.sfx_master = 0.7
         self.sfx_base = {
@@ -197,12 +208,15 @@ class Client:
             "nuke_charge": 0.75,
             "nuke_explosion": 0.9,
             "clone": 0.6,
+            "chaos_tick": 0.6,
+            "giant_spawn": 0.7,
         }
         self.music_tracks = {
             "menu": self.assets_root / "sound" / "ost" / "Anarchy-Chess-OST-0-Menu.ogg",
             "game": self.assets_root / "sound" / "ost" / "Anarchy-Chess-OST-1-The-Bad-Calm.ogg",
             "win": self.assets_root / "sound" / "ost" / "Anarchy-Chess-OST-2-Victory.ogg",
             "lose": self.assets_root / "sound" / "ost" / "Anarchy-Chess-OST-3-Defeat.ogg",
+            "chaos": self.assets_root / "sound" / "ost" / "Anarchy-Chess-OST-4-Bad-Nine.ogg",
         }
         self.settings_rows = [
             ("music_master", "Гучність музики"),
@@ -405,6 +419,7 @@ class Client:
         pygame.init()
         self.init_audio()
         screen = pygame.display.set_mode((self.winw, self.winh))
+        self.set_window_icon()
         pygame.display.set_caption("Anarchy Chess a-b 0.1")
         self.load_explosion_frames()
         self.load_mine_image()
@@ -538,11 +553,20 @@ class Client:
                     elif self.ui_state == "replay":
                         rects = self.replay_controls()
                         list_rects = self.replay_game_rects or {}
+                        scroll_rects = self.replay_scroll_rects or {}
                         if rects.get("back") and rects["back"].collidepoint(ev.pos):
                             self.play_sfx_list(self.sfx_click)
                             self.ui_state = "menu"
                             self.replay_playing = False
                         else:
+                            if scroll_rects.get("up") and scroll_rects["up"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.adjust_replay_scroll(-1)
+                                continue
+                            if scroll_rects.get("down") and scroll_rects["down"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.adjust_replay_scroll(1)
+                                continue
                             clicked_game = False
                             for idx, r in list_rects.items():
                                 if r.collidepoint(ev.pos):
@@ -588,10 +612,12 @@ class Client:
                                 selected = None
                                 self.to_menu()
                             elif rects["restart"].collidepoint(ev.pos):
-                                self.play_sfx_list(self.sfx_click)
-                                selected = None
-                                self.restart_game()
+                                    self.play_sfx_list(self.sfx_click)
+                                    selected = None
+                                    self.restart_game()
                         elif self.state:
+                            if self.handle_inventory_click(ev.pos):
+                                continue
                             if self.handle_item_click(ev.pos):
                                 continue
                             if self.item_target_mode:
@@ -606,11 +632,19 @@ class Client:
                                 if selected is None:
                                     p = self.state.board.get_piece(*coord)
                                     if p and p.color == self.my_color:
-                                        selected = coord
+                                        selected = self.get_piece_anchor(coord)
                                 else:
                                     send_json(self.sock, {"type":"move","from":[selected[0],selected[1]], "to":[coord[0],coord[1]], "color": self.my_color})
                                     self.move_block_until = time.time() + self.move_cooldown
                                     selected = None
+
+                if ev.type == pygame.MOUSEWHEEL and self.ui_state == "replay":
+                    if ev.y != 0:
+                        self.adjust_replay_scroll(-ev.y)
+
+                if ev.type == pygame.MOUSEBUTTONDOWN and ev.button in (4, 5) and self.ui_state == "replay":
+                    delta = -1 if ev.button == 4 else 1
+                    self.adjust_replay_scroll(delta)
 
             self.sync_music()
             screen.fill(self.colors["vanilla_bg"])
@@ -657,12 +691,13 @@ class Client:
                     self.draw_explosions(screen)
                 self.draw_top_bar(screen, font)
                 self.draw_right_panel(screen, font, big_font)
-                self.draw_status(screen, font, big_font)
+                self.draw_inventory_bar(screen)
                 if self.game_over:
                     self.draw_game_over(screen, big_font, font, mouse_pos)
                 if hasattr(self,'popup'):
                     self.draw_popup(screen, font)
 
+            self.apply_chaos_visuals(screen)
             pygame.display.flip()
 
         pygame.quit()
@@ -670,6 +705,23 @@ class Client:
             self.sock.close()
         except:
             pass
+
+    def set_window_icon(self):
+        candidates = [
+            self.assets_root / "textures" / "ui" / "logo_2.png",
+            self.assets_root / "textures" / "logo_2.png",
+            self.assets_root / "logo_2.png",
+        ]
+        for path in candidates:
+            if not path.exists():
+                continue
+            try:
+                icon = pygame.image.load(str(path)).convert_alpha()
+                pygame.display.set_icon(icon)
+                return True
+            except Exception:
+                continue
+        return False
 
     def menu_buttons(self):
         join_rect = pygame.Rect(self.winw//2 - 120, self.winh//2 - 60, 240, 56)
@@ -795,6 +847,9 @@ class Client:
         if kind == "accent":
             font_name = cfg.FONT_ACCENT_NAME
             font_file = cfg.FONT_ACCENT_FILE
+        elif kind == "uses":
+            font_name = getattr(cfg, "FONT_USES_NAME", cfg.FONT_MAIN_NAME)
+            font_file = getattr(cfg, "FONT_USES_FILE", cfg.FONT_MAIN_FILE)
         else:
             font_name = cfg.FONT_MAIN_NAME
             font_file = cfg.FONT_MAIN_FILE
@@ -899,6 +954,7 @@ class Client:
         self.replay_playing = False
         self.replay_speed_index = 0
         self.replay_next_time = 0.0
+        self.replay_list_offset = 0
         self.piece_animations = []
         self.ui_state = "replay"
 
@@ -945,6 +1001,7 @@ class Client:
         self.replay_state = self.snapshot_state(self.replay_states[0]) if self.replay_states else None
         self.replay_playing = False
         self.replay_next_time = time.time()
+        self.replay_list_offset = 0
         self.piece_animations = []
         self.explosions = []
         self.mine_reveals = []
@@ -998,13 +1055,21 @@ class Client:
         if not isinstance(position, dict):
             return state
         board = position.get("board", [])
+        pieces_by_gid = {}
         for y in range(8):
             for x in range(8):
                 cell = None
                 if y < len(board) and x < len(board[y]):
                     cell = board[y][x]
                 if cell:
-                    state.board.set_piece(x, y, Piece(cell.get("ptype"), cell.get("color")))
+                    gid = cell.get("gid") if isinstance(cell, dict) else None
+                    if gid is not None and gid in pieces_by_gid:
+                        p = pieces_by_gid[gid]
+                    else:
+                        p = Piece(cell.get("ptype"), cell.get("color"), pid=gid, size=cell.get("size"), anchor=cell.get("anchor"))
+                        if gid is not None:
+                            pieces_by_gid[gid] = p
+                    state.board.set_piece(x, y, p)
         if "mines" in position:
             state.mines = position.get("mines")
         if "revealed" in position:
@@ -1137,6 +1202,34 @@ class Client:
         rects["back"] = pygame.Rect(20, 20, 120, 40)
         return rects
 
+    def replay_list_layout(self):
+        layout = self.replay_layout()
+        panel = layout["panel_rect"]
+        list_x = panel.x + 12
+        list_y = panel.y + 70
+        list_w = panel.width - 24
+        row_h = 56
+        result_h = 170
+        list_bottom = panel.bottom - result_h - 12
+        visible = max(1, int((list_bottom - list_y) // row_h)) if list_bottom > list_y else 1
+        max_offset = max(0, len(self.replay_games) - visible)
+        return {
+            "panel": panel,
+            "list_x": list_x,
+            "list_y": list_y,
+            "list_w": list_w,
+            "row_h": row_h,
+            "list_bottom": list_bottom,
+            "result_h": result_h,
+            "visible": visible,
+            "max_offset": max_offset,
+        }
+
+    def adjust_replay_scroll(self, delta):
+        layout = self.replay_list_layout()
+        max_offset = layout["max_offset"]
+        self.replay_list_offset = max(0, min(self.replay_list_offset + delta, max_offset))
+
     def draw_replay(self, screen, big_font, font, mouse_pos):
         screen.fill(self.colors["vanilla_bg"])
         title = big_font.render("Replay", True, self.colors["vanilla_secondary"])
@@ -1175,50 +1268,56 @@ class Client:
         move_txt = font.render(f"Хід: {self.replay_move_index}/{total}", True, (220, 220, 220))
         screen.blit(move_txt, move_txt.get_rect(center=(self.winw // 2, rects["first"].bottom + 24)))
 
-        # game over summary
-        game_over = None
-        if self.replay_games and 0 <= self.replay_selected < len(self.replay_games):
-            game_over = self.replay_games[self.replay_selected].get("game_over")
-        info_y = rects["first"].bottom + 46
-        if game_over:
-            final_move = game_over.get("final_move")
-            if final_move is not None:
-                final_txt = font.render(f"Фінальний хід: {final_move}", True, (210, 210, 210))
-                screen.blit(final_txt, final_txt.get_rect(center=(self.winw // 2, info_y)))
-                info_y += 22
-            comment = game_over.get("comment") or ""
-            if comment:
-                max_w = self.cell * 8 - 40
-                lines = self.wrap_text(comment, font, max_w)
-                for line in lines[:3]:
-                    surf = font.render(line, True, (190, 190, 190))
-                    screen.blit(surf, surf.get_rect(center=(self.winw // 2, info_y)))
-                    info_y += 20
-
         # game list
-        layout = self.replay_layout()
-        panel = layout["panel_rect"]
-        list_x = panel.x + 12
-        list_y = panel.y + 70
-        list_w = panel.width - 24
-        row_h = 56
+        layout = self.replay_list_layout()
+        panel = layout["panel"]
+        list_x = layout["list_x"]
+        list_y = layout["list_y"]
+        list_w = layout["list_w"]
+        row_h = layout["row_h"]
+        list_bottom = layout["list_bottom"]
+        visible = layout["visible"]
+        max_offset = layout["max_offset"]
+        self.replay_list_offset = max(0, min(self.replay_list_offset, max_offset))
+        result_rect = pygame.Rect(panel.x + 12, panel.bottom - layout["result_h"] - 12, panel.width - 24, layout["result_h"])
         self.replay_game_rects = {}
         list_title = font.render("Партії", True, self.colors["vanilla_secondary"])
         screen.blit(list_title, (panel.x + 12, panel.y + 18))
+
+        self.replay_scroll_rects = {}
+        if max_offset > 0:
+            up_rect = pygame.Rect(panel.right - 44, panel.y + 16, 18, 18)
+            down_rect = pygame.Rect(panel.right - 22, panel.y + 16, 18, 18)
+            self.replay_scroll_rects = {"up": up_rect, "down": down_rect}
+            up_enabled = self.replay_list_offset > 0
+            down_enabled = self.replay_list_offset < max_offset
+            up_col = self.colors["vanilla_button_hover"] if up_enabled else (60, 60, 60)
+            down_col = self.colors["vanilla_button_hover"] if down_enabled else (60, 60, 60)
+            pygame.draw.rect(screen, up_col, up_rect, border_radius=4)
+            pygame.draw.rect(screen, down_col, down_rect, border_radius=4)
+            pygame.draw.rect(screen, self.colors["vanilla_button_border"], up_rect, 1, border_radius=4)
+            pygame.draw.rect(screen, self.colors["vanilla_button_border"], down_rect, 1, border_radius=4)
+            up_txt = font.render("▲", True, (220, 220, 220))
+            down_txt = font.render("▼", True, (220, 220, 220))
+            screen.blit(up_txt, up_txt.get_rect(center=up_rect.center))
+            screen.blit(down_txt, down_txt.get_rect(center=down_rect.center))
 
         if not self.replay_games:
             msg = font.render("Немає збережених ігор", True, (180, 180, 180))
             screen.blit(msg, (list_x, list_y + 8))
             return
 
-        for i, game in enumerate(self.replay_games):
-            y = list_y + i * row_h
-            if y + row_h > panel.bottom:
+        start_idx = self.replay_list_offset
+        for i in range(visible):
+            idx = start_idx + i
+            if idx >= len(self.replay_games):
                 break
+            game = self.replay_games[idx]
+            y = list_y + i * row_h
             row_rect = pygame.Rect(list_x, y, list_w, row_h - 8)
-            self.replay_game_rects[i] = row_rect
+            self.replay_game_rects[idx] = row_rect
             hovered = row_rect.collidepoint(mouse_pos)
-            selected = (i == self.replay_selected)
+            selected = (idx == self.replay_selected)
             bg = (60, 50, 80) if hovered else (52, 42, 70)
             if selected:
                 bg = (76, 60, 100)
@@ -1238,11 +1337,70 @@ class Client:
                 sub_surf = self.fit_text_surface(font, sub, row_rect.width - 16, (180, 180, 180), max_height=20)
                 screen.blit(sub_surf, (row_rect.x + 8, row_rect.y + 28))
 
+        self.draw_replay_result_panel(screen, font, result_rect)
+
+    def draw_replay_result_panel(self, screen, font, rect):
+        pygame.draw.rect(screen, (48, 40, 66), rect, border_radius=8)
+        pygame.draw.rect(screen, self.colors["vanilla_button_border"], rect, 2, border_radius=8)
+        title = font.render("Результат", True, self.colors["vanilla_secondary"])
+        screen.blit(title, (rect.x + 10, rect.y + 8))
+        body_font = self.get_font("main", 18)
+
+        game_over = None
+        if self.replay_games and 0 <= self.replay_selected < len(self.replay_games):
+            game_over = self.replay_games[self.replay_selected].get("game_over")
+
+        y = rect.y + 32
+        if not game_over:
+            msg = body_font.render("Немає даних про кінець гри", True, (180, 180, 180))
+            screen.blit(msg, (rect.x + 10, y))
+            return
+
+        final_move = game_over.get("final_move")
+        if final_move is not None:
+            line = body_font.render(f"Фінальний хід: {final_move}", True, (210, 210, 210))
+            screen.blit(line, (rect.x + 10, y))
+            y += 20
+        final_move_text = game_over.get("final_move_text")
+        if final_move_text:
+            lines = self.clamp_wrapped_lines(final_move_text, body_font, rect.width - 20, 2)
+            for line in lines:
+                surf = body_font.render(line, True, (180, 180, 180))
+                screen.blit(surf, (rect.x + 10, y))
+                y += 18
+
+        comment = game_over.get("comment") or ""
+        if comment:
+            score_h = body_font.get_height() + 6
+            available = max(0, rect.bottom - score_h - y - 6)
+            max_lines = max(1, available // max(1, body_font.get_height()))
+            lines = self.clamp_wrapped_lines(comment, body_font, rect.width - 20, max_lines)
+            for line in lines:
+                surf = body_font.render(line, True, (190, 190, 190))
+                screen.blit(surf, (rect.x + 10, y))
+                y += 18
+
+        final_score = game_over.get("final_score")
+        if isinstance(final_score, dict):
+            royals = final_score.get("royals", {})
+            material = final_score.get("material", {})
+            score_text = (
+                f"Рахунок: королівські {royals.get('white', 0)}-{royals.get('black', 0)}, "
+                f"матеріал {material.get('white', 0)}-{material.get('black', 0)}"
+            )
+            sc = self.fit_text_surface(body_font, score_text, rect.width - 20, (200, 200, 200), max_height=18)
+            screen.blit(sc, (rect.x + 10, rect.bottom - 24))
+
     def apply_replay_event(self, state, entry):
         name = entry.get("name") or ""
         target = entry.get("target")
         extra = entry.get("extra") or ""
         coords = self.extract_coords(target)
+        def clear_at(x, y):
+            if hasattr(state.board, "clear_piece"):
+                state.board.clear_piece(x, y)
+            else:
+                state.board.set_piece(x, y, None)
 
         if name in ("SpawnMine", "SpawnMines", "PlaceMine"):
             for (x, y) in coords:
@@ -1315,7 +1473,7 @@ class Client:
             for (x, y) in coords:
                 if 0 <= x < 8 and 0 <= y < 8:
                     state.chessplus_cells[y][x] = "void"
-                    state.board.set_piece(x, y, None)
+                    clear_at(x, y)
             return
         if name == "Swap" and len(coords) >= 2:
             (ax, ay), (bx, by) = coords[0], coords[1]
@@ -1328,33 +1486,72 @@ class Client:
             (sx, sy), (tx, ty) = coords[0], coords[1]
             p = state.board.get_piece(sx, sy)
             if p:
-                state.board.set_piece(sx, sy, None)
-                state.board.set_piece(tx, ty, p)
+                state.board.move_piece((sx, sy), (tx, ty))
             return
         if name == "Pistol":
             hit_coords = self.extract_coords(extra)
             if hit_coords:
                 x, y = hit_coords[0]
-                state.board.set_piece(x, y, None)
+                clear_at(x, y)
             return
         if name == "Burn":
             if coords:
                 x, y = coords[0]
-                state.board.set_piece(x, y, None)
+                clear_at(x, y)
                 state.chessplus_burning.pop(self.pos_key(x, y), None)
             return
         if name == "Clone":
             if "expired" in str(extra):
                 if coords:
                     x, y = coords[0]
-                    state.board.set_piece(x, y, None)
+                    clear_at(x, y)
                     state.chessplus_clones.pop(self.pos_key(x, y), None)
             elif len(coords) >= 2:
                 (sx, sy), (tx, ty) = coords[0], coords[1]
                 p = state.board.get_piece(sx, sy)
                 if p:
-                    state.board.set_piece(tx, ty, Piece(p.ptype, p.color))
+                    size = max(1, int(getattr(p, "size", 1)))
+                    new_piece = Piece(p.ptype, p.color, size=size, anchor=(tx, ty))
+                    if hasattr(state.board, "place_piece"):
+                        state.board.place_piece(new_piece, (tx, ty))
+                    else:
+                        state.board.set_piece(tx, ty, new_piece)
                     state.chessplus_clones[self.pos_key(tx, ty)] = 3
+            return
+        if name == "SpawnPiece":
+            if coords:
+                x, y = coords[0]
+                extra_text = str(extra)
+                color = None
+                ptype = None
+                if ":" in extra_text:
+                    color, ptype = extra_text.split(":", 1)
+                if ptype and color:
+                    size = piece_size(ptype)
+                    new_piece = Piece(ptype, color, size=size, anchor=(x, y))
+                    if hasattr(state.board, "place_piece"):
+                        state.board.place_piece(new_piece, (x, y))
+                    else:
+                        state.board.set_piece(x, y, new_piece)
+            return
+        if name == "ChangePiece":
+            if coords:
+                x, y = coords[0]
+                p = state.board.get_piece(x, y)
+                if p:
+                    change_text = str(extra)
+                    if ":" in change_text:
+                        _, change_text = change_text.split(":", 1)
+                    if "->" in change_text:
+                        new_type = change_text.split("->")[-1].strip()
+                        anchor = getattr(p, "anchor", None)
+                        if anchor is None and hasattr(state.board, "find_piece_anchor"):
+                            anchor = state.board.find_piece_anchor(p)
+                        if anchor is None:
+                            anchor = (x, y)
+                        state.board.clear_piece(anchor[0], anchor[1])
+                        apply_piece_type(p, new_type, anchor=anchor)
+                        state.board.place_piece(p, anchor)
             return
         if name == "PawnMutation":
             if coords:
@@ -1370,24 +1567,29 @@ class Client:
                 x, y = coords[0]
                 p = state.board.get_piece(x, y)
                 if p:
-                    p.ptype = "queen"
-                    p.is_royal = True
+                    apply_piece_type(p, "queen", anchor=(x, y))
             return
         if name == "Dice":
             if coords:
                 x, y = coords[0]
                 p = state.board.get_piece(x, y)
                 if "removed" in str(extra):
-                    state.board.set_piece(x, y, None)
+                    clear_at(x, y)
                 elif "->" in str(extra) and p:
                     new_type = str(extra).split("->")[-1].strip()
-                    p.ptype = new_type
-                    p.is_royal = new_type in ("king", "queen")
+                    anchor = getattr(p, "anchor", None)
+                    if anchor is None and hasattr(state.board, "find_piece_anchor"):
+                        anchor = state.board.find_piece_anchor(p)
+                    if anchor is None:
+                        anchor = (x, y)
+                    state.board.clear_piece(anchor[0], anchor[1])
+                    apply_piece_type(p, new_type, anchor=anchor)
+                    state.board.place_piece(p, anchor)
             return
         if name == "Toxic":
             if coords and "removed" in str(extra):
                 x, y = coords[0]
-                state.board.set_piece(x, y, None)
+                clear_at(x, y)
             return
 
     def apply_replay_explosion(self, state, center, radius=1):
@@ -1401,7 +1603,10 @@ class Client:
         for x in range(cx - radius, cx + radius + 1):
             for y in range(cy - radius, cy + radius + 1):
                 if 0 <= x < 8 and 0 <= y < 8:
-                    state.board.set_piece(x, y, None)
+                    if hasattr(state.board, "clear_piece"):
+                        state.board.clear_piece(x, y)
+                    else:
+                        state.board.set_piece(x, y, None)
                     state.mines[y][x] = 0
                     state.revealed[y][x] = 0
         state.craters.add((cx, cy))
@@ -1603,6 +1808,10 @@ class Client:
             return None
         if self.ui_state in ("menu", "mode", "host_menu", "name", "settings", "replay"):
             return "menu"
+        if self.ui_state == "game" and self.state is not None:
+            chaos = int(getattr(self.state, "chaos", 0))
+            if chaos >= 67:
+                return "chaos"
         if self.ui_state == "game" and not self.has_state:
             return "menu"
         return "game"
@@ -1666,6 +1875,10 @@ class Client:
             self.sfx_nuke_explosion.set_volume(self.sfx_base["nuke_explosion"] * self.sfx_master)
         if self.sfx_clone:
             self.sfx_clone.set_volume(self.sfx_base["clone"] * self.sfx_master)
+        if self.sfx_chaos_tick:
+            self.sfx_chaos_tick.set_volume(self.sfx_base["chaos_tick"] * self.sfx_master)
+        if self.sfx_giant_spawn:
+            self.sfx_giant_spawn.set_volume(self.sfx_base["giant_spawn"] * self.sfx_master)
         for snd in self.sfx_move:
             snd.set_volume(self.sfx_base["move"] * self.sfx_master)
         for snd in self.sfx_capture:
@@ -1714,6 +1927,8 @@ class Client:
         self.sfx_nuke_charge = self.load_sound(self.assets_root / "sound" / "sfx" / "nuke_charge.wav", self.sfx_base["nuke_charge"])
         self.sfx_nuke_explosion = self.load_sound(self.assets_root / "sound" / "sfx" / "nuke_explosion.wav", self.sfx_base["nuke_explosion"])
         self.sfx_clone = self.load_sound(self.assets_root / "sound" / "sfx" / "clone.wav", self.sfx_base["clone"])
+        self.sfx_chaos_tick = self.load_sound(self.assets_root / "sound" / "sfx" / "chaos_tick.wav", self.sfx_base["chaos_tick"])
+        self.sfx_giant_spawn = self.load_sound(self.assets_root / "sound" / "sfx" / "giant_spawn.wav", self.sfx_base["giant_spawn"])
         self.update_sfx_volume()
         # Defer music start to the main loop (prevents a blip before intro).
 
@@ -1777,6 +1992,44 @@ class Client:
             self.mine_image = img
         except Exception:
             self.mine_image = None
+
+    def get_inventory_bar_image(self, size):
+        if self.inventory_bar_image is not None and self.inventory_bar_size == size:
+            return self.inventory_bar_image
+        path = self.assets_root / "textures" / "ui" / "inventory_bar.png"
+        if not path.exists():
+            self.inventory_bar_image = None
+            self.inventory_bar_size = None
+            return None
+        try:
+            img = pygame.image.load(str(path)).convert_alpha()
+            img = pygame.transform.smoothscale(img, size)
+            self.inventory_bar_image = img
+            self.inventory_bar_size = size
+            return img
+        except Exception:
+            self.inventory_bar_image = None
+            self.inventory_bar_size = None
+            return None
+
+    def get_inventory_slot_image(self, size):
+        if self.inventory_slot_image is not None and self.inventory_slot_size == size:
+            return self.inventory_slot_image
+        path = self.assets_root / "textures" / "ui" / "inventory_slot.png"
+        if not path.exists():
+            self.inventory_slot_image = None
+            self.inventory_slot_size = None
+            return None
+        try:
+            img = pygame.image.load(str(path)).convert_alpha()
+            img = pygame.transform.smoothscale(img, (size, size))
+            self.inventory_slot_image = img
+            self.inventory_slot_size = size
+            return img
+        except Exception:
+            self.inventory_slot_image = None
+            self.inventory_slot_size = None
+            return None
 
     def load_intro_frames(self):
         frames = []
@@ -1944,6 +2197,15 @@ class Client:
         if match_running is not None:
             self.timer_running = bool(match_running)
 
+        chaos = int(getattr(self.state, "chaos", 0))
+        new_bucket = min(9, chaos // 10)
+        if new_bucket > self.chaos_bucket:
+            if self.ui_state == "game":
+                self.play_sfx(self.sfx_chaos_tick)
+            self.chaos_bucket = new_bucket
+        elif new_bucket < self.chaos_bucket:
+            self.chaos_bucket = new_bucket
+
         if self.state.move_count != self.last_move_count:
             move_info = None
             if self.prev_state:
@@ -1992,6 +2254,24 @@ class Client:
                         planted += 1
             if planted > 0:
                 self.play_sfx_list(self.sfx_mine_plant)
+            prev_giants = set()
+            curr_giants = set()
+            for y in range(8):
+                for x in range(8):
+                    pp = self.prev_state.board.get_piece(x, y)
+                    if pp and pp.ptype == "giant_pawn":
+                        key = getattr(pp, "gid", None)
+                        if key is None:
+                            key = id(pp)
+                        prev_giants.add(key)
+                    pc = self.state.board.get_piece(x, y)
+                    if pc and pc.ptype == "giant_pawn":
+                        key = getattr(pc, "gid", None)
+                        if key is None:
+                            key = id(pc)
+                        curr_giants.add(key)
+            if curr_giants - prev_giants:
+                self.play_sfx(self.sfx_giant_spawn)
 
         if self.selected_item_slot is not None:
             if not self.get_inventory_item(self.selected_item_slot):
@@ -2000,6 +2280,53 @@ class Client:
         self.prev_state = self.state
 
     def detect_moved_piece(self, prev_state, curr_state):
+        def build_map(state):
+            mapping = {}
+            seen = set()
+            for y in range(8):
+                for x in range(8):
+                    p = state.board.get_piece(x, y)
+                    if not p:
+                        continue
+                    key = getattr(p, "gid", None)
+                    if key is None:
+                        key = id(p)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    anchor = getattr(p, "anchor", None)
+                    if anchor is None and hasattr(state.board, "find_piece_anchor"):
+                        anchor = state.board.find_piece_anchor(p)
+                    if anchor is None:
+                        anchor = (x, y)
+                    mapping[key] = (p, anchor)
+            return mapping
+
+        prev_map = build_map(prev_state)
+        curr_map = build_map(curr_state)
+        for key, (p, cur_anchor) in curr_map.items():
+            if key not in prev_map:
+                continue
+            prev_anchor = prev_map[key][1]
+            if prev_anchor != cur_anchor:
+                captured = False
+                size = max(1, int(getattr(p, "size", 1)))
+                if size > 1:
+                    for dy in range(size):
+                        for dx in range(size):
+                            nx = cur_anchor[0] + dx
+                            ny = cur_anchor[1] + dy
+                            prev_dest = prev_state.board.get_piece(nx, ny)
+                            if prev_dest and prev_dest.color != p.color:
+                                captured = True
+                                break
+                        if captured:
+                            break
+                else:
+                    prev_dest = prev_state.board.get_piece(cur_anchor[0], cur_anchor[1])
+                    captured = prev_dest is not None and prev_dest.color != p.color
+                return (prev_anchor[0], prev_anchor[1], cur_anchor[0], cur_anchor[1], p, captured)
+
         from_squares = []
         to_squares = []
         for y in range(8):
@@ -2008,7 +2335,7 @@ class Client:
                 p_curr = curr_state.board.get_piece(x, y)
                 if p_prev and (p_curr is None or p_curr.color != p_prev.color or p_curr.ptype != p_prev.ptype):
                     from_squares.append((x, y, p_prev))
-                if p_curr and (p_prev is None or p_prev.color != p_curr.color or p_prev.ptype != p_curr.ptype):
+                if p_curr and (p_prev is None or p_prev.color != p_curr.color or p_prev.ptype != p_prev.ptype):
                     to_squares.append((x, y, p_curr))
         if not to_squares:
             return None
@@ -2039,11 +2366,13 @@ class Client:
         img = self.get_piece_image(piece)
         if not img:
             return
+        size = max(1, int(getattr(piece, "size", 1)))
         start_disp = self.board_to_display((fx, fy))
         end_disp = self.board_to_display((tx, ty))
         bx, by = self.get_board_origin()
-        start_px = (bx + start_disp[0] * self.cell + self.cell // 2, by + start_disp[1] * self.cell + self.cell // 2)
-        end_px = (bx + end_disp[0] * self.cell + self.cell // 2, by + end_disp[1] * self.cell + self.cell // 2)
+        half = int(self.cell * size / 2)
+        start_px = (bx + start_disp[0] * self.cell + half, by + start_disp[1] * self.cell + half)
+        end_px = (bx + end_disp[0] * self.cell + half, by + end_disp[1] * self.cell + half)
         self.piece_animations.append({
             "img": img,
             "start": start_px,
@@ -2218,12 +2547,33 @@ class Client:
         coords = set()
         if not self.state or not self.my_color:
             return coords
+        seen = set()
         for y in range(8):
             for x in range(8):
                 p = self.state.board.get_piece(x, y)
                 if p and p.color == self.my_color:
-                    coords.add((x, y))
+                    key = getattr(p, "gid", None)
+                    if key is None:
+                        key = id(p)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    anchor = getattr(p, "anchor", None)
+                    if anchor is None and hasattr(self.state.board, "find_piece_anchor"):
+                        anchor = self.state.board.find_piece_anchor(p)
+                    coords.add(tuple(anchor) if anchor is not None else (x, y))
         return coords
+
+    def get_piece_anchor(self, coord):
+        if not self.state:
+            return coord
+        piece = self.state.board.get_piece(*coord)
+        if not piece:
+            return coord
+        anchor = getattr(piece, "anchor", None)
+        if anchor is None and hasattr(self.state.board, "find_piece_anchor"):
+            anchor = self.state.board.find_piece_anchor(piece)
+        return tuple(anchor) if anchor is not None else coord
 
     def get_inventory_item(self, slot):
         inv = self.get_my_inventory()
@@ -2303,6 +2653,16 @@ class Client:
             self.play_item_sfx(item.get("effect_id"))
             self.clear_item_targeting()
 
+    def handle_inventory_click(self, pos):
+        if not self.inventory_slot_rects:
+            return False
+        for slot, rect in self.inventory_slot_rects.items():
+            if rect.collidepoint(pos):
+                self.play_sfx_list(self.sfx_click)
+                self.handle_inventory_key(slot)
+                return True
+        return False
+
     def play_item_sfx(self, effect_id):
         if effect_id == "cp_item_teleport":
             self.play_sfx(self.sfx_teleport)
@@ -2332,14 +2692,15 @@ class Client:
                 p = self.state.board.get_piece(*coord) if self.state else None
                 if not p or p.color != self.my_color:
                     return False
-                self.item_selected_piece = coord
+                anchor = self.get_piece_anchor(coord)
+                self.item_selected_piece = anchor
                 if target_type == "piece":
-                    send_json(self.sock, {"type":"use_item", "slot": self.selected_item_slot, "target": {"from":[coord[0], coord[1]]}})
+                    send_json(self.sock, {"type":"use_item", "slot": self.selected_item_slot, "target": {"from":[anchor[0], anchor[1]]}})
                     self.play_item_sfx(item.get("effect_id"))
                     self.clear_item_targeting()
                     return True
                 self.item_target_phase = "cell"
-                self.item_target_cells = self.get_item_target_cells(item, coord)
+                self.item_target_cells = self.get_item_target_cells(item, anchor)
                 return True
             else:
                 if self.item_target_cells and coord not in self.item_target_cells:
@@ -2367,10 +2728,22 @@ class Client:
             return cells
         sx, sy = src
         effect_id = item.get("effect_id")
+        piece = self.state.board.get_piece(sx, sy)
+        size = max(1, int(getattr(piece, "size", 1))) if piece else 1
         if effect_id == "cp_item_teleport":
             for y in range(8):
                 for x in range(8):
-                    if self.state.board.get_piece(x, y) is None:
+                    if x + size - 1 >= 8 or y + size - 1 >= 8:
+                        continue
+                    ok = True
+                    for dy in range(size):
+                        for dx in range(size):
+                            if self.state.board.get_piece(x + dx, y + dy) is not None:
+                                ok = False
+                                break
+                        if not ok:
+                            break
+                    if ok:
                         cells.add((x, y))
         elif effect_id == "cp_item_clone":
             for dx in (-1, 0, 1):
@@ -2378,14 +2751,29 @@ class Client:
                     if dx == 0 and dy == 0:
                         continue
                     nx, ny = sx + dx, sy + dy
-                    if 0 <= nx < 8 and 0 <= ny < 8:
-                        if self.state.board.get_piece(nx, ny) is None:
+                    if 0 <= nx < 8 and 0 <= ny < 8 and nx + size - 1 < 8 and ny + size - 1 < 8:
+                        ok = True
+                        for yy in range(size):
+                            for xx in range(size):
+                                if self.state.board.get_piece(nx + xx, ny + yy) is not None:
+                                    ok = False
+                                    break
+                            if not ok:
+                                break
+                        if ok:
                             effect = None
-                            try:
-                                effect = self.state.chessplus_cells[ny][nx]
-                            except Exception:
-                                effect = None
-                            if effect is None:
+                            for yy in range(size):
+                                for xx in range(size):
+                                    try:
+                                        effect = self.state.chessplus_cells[ny + yy][nx + xx]
+                                    except Exception:
+                                        effect = None
+                                    if effect is not None:
+                                        ok = False
+                                        break
+                                if not ok:
+                                    break
+                            if ok:
                                 cells.add((nx, ny))
         elif effect_id == "cp_item_pistol":
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
@@ -2406,6 +2794,7 @@ class Client:
             return moves, captures
         if self.state.turn != self.my_color:
             return moves, captures
+        coord = self.get_piece_anchor(coord)
         piece = self.state.board.get_piece(*coord)
         if not piece or piece.color != self.my_color:
             return moves, captures
@@ -2414,11 +2803,28 @@ class Client:
                 ok, _ = validate_move(self.state, coord, (x, y), piece.color)
                 if not ok:
                     continue
-                dest = self.state.board.get_piece(x, y)
-                if dest and dest.color != piece.color:
-                    captures.add((x, y))
+                if piece.ptype == "giant_pawn":
+                    enemy = False
+                    for dy in range(2):
+                        for dx in range(2):
+                            nx, ny = x + dx, y + dy
+                            if 0 <= nx < 8 and 0 <= ny < 8:
+                                dest = self.state.board.get_piece(nx, ny)
+                                if dest and dest.color != piece.color:
+                                    enemy = True
+                                    break
+                        if enemy:
+                            break
+                    if enemy:
+                        captures.add((x, y))
+                    else:
+                        moves.add((x, y))
                 else:
-                    moves.add((x, y))
+                    dest = self.state.board.get_piece(x, y)
+                    if dest and dest.color != piece.color:
+                        captures.add((x, y))
+                    else:
+                        moves.add((x, y))
         return moves, captures
 
     def draw_board_background(self, screen, selected, hint_moves=None, hint_captures=None, hint_items=None, hover_cell=None):
@@ -2604,7 +3010,8 @@ class Client:
                 pygame.draw.line(screen, col, (x, sy), (x, sy + self.cell), 4)
 
     def get_piece_image(self, piece):
-        key = (piece.color, piece.ptype)
+        size = max(1, int(getattr(piece, "size", 1)))
+        key = (piece.color, piece.ptype, size)
         if key in self.texture_cache:
             return self.texture_cache[key]
         candidates = [
@@ -2617,7 +3024,8 @@ class Client:
             if path.exists():
                 try:
                     img = pygame.image.load(str(path)).convert_alpha()
-                    img = pygame.transform.smoothscale(img, (42, 42))
+                    target = 42 if size <= 1 else int(self.cell * size)
+                    img = pygame.transform.smoothscale(img, (target, target))
                     break
                 except Exception:
                     img = None
@@ -2731,6 +3139,17 @@ class Client:
                 # draw piece if present
                 piece = self.state.board.get_piece(board_x, board_y)
                 if piece and (board_x, board_y) not in anim_dests:
+                    size = max(1, int(getattr(piece, "size", 1)))
+                    anchor = getattr(piece, "anchor", None)
+                    if anchor is None and hasattr(self.state.board, "find_piece_anchor"):
+                        anchor = self.state.board.find_piece_anchor(piece)
+                    if size > 1:
+                        if anchor is None:
+                            anchor = (board_x, board_y)
+                        if (board_x, board_y) != tuple(anchor):
+                            continue
+                        disp = self.board_to_display(anchor)
+                        rect = pygame.Rect(bx + disp[0]*self.cell, by + disp[1]*self.cell, self.cell * size, self.cell * size)
                     img = self.get_piece_image(piece)
                     if img:
                         screen.blit(img, img.get_rect(center=rect.center))
@@ -2766,6 +3185,7 @@ class Client:
         x = layout["board_x"]
         y = layout["board_y"] + layout["board_size"] + 12
         color_map = {"white": "білий", "black": "чорний"}
+        ox, oy = self.get_chaos_text_offset()
 
         lines = []
         if self.state:
@@ -2793,13 +3213,10 @@ class Client:
                     elif remaining <= 60_000:
                         color = (220, 140, 40)
             txt = font.render(line, True, color)
-            screen.blit(txt, (x, y))
+            screen.blit(txt, (x + ox, y + oy))
             y += 24
 
-        if self.last_error:
-            err_text = self.error_text(self.last_error)
-            err = font.render(f"Помилка: {err_text}", True, (220, 80, 80))
-            screen.blit(err, (x, y))
+        self.draw_chaos_bar(screen, font, x + ox, y + oy + 4, width=280, height=20)
 
     def get_timer_display(self):
         if self.timer_sync_ms is None or self.timer_sync_time is None:
@@ -2836,6 +3253,11 @@ class Client:
             "illegal_rook_move": "Нелегальний хід тури",
             "illegal_queen_move": "Нелегальний хід ферзя",
             "illegal_king_move": "Нелегальний хід короля",
+            "illegal_amazon_move": "Нелегальний хід амазона",
+            "illegal_archbishop_move": "Нелегальний хід архієпископа",
+            "illegal_camel_move": "Нелегальний хід верблюда",
+            "illegal_giant_move": "Нелегальний хід гігантської пішаки",
+            "illegal_giant_capture": "Нелегальне взяття гігантською пішаки",
             "same_square": "Хід у ту саму клітинку",
             "blocked": "Шлях заблоковано",
             "item_missing": "Предмет відсутній",
@@ -2844,6 +3266,72 @@ class Client:
             "unknown_item": "Невідомий предмет",
         }
         return mapping.get(code, code)
+
+    def get_chaos_value(self):
+        if not self.state:
+            return 0
+        return int(getattr(self.state, "chaos", 0))
+
+    def chaos_bar_color(self, chaos):
+        chaos = max(0, min(100, chaos))
+        if chaos < 67:
+            t = chaos / 67.0
+            r = int(40 + (220 - 40) * t)
+            g = int(200 + (200 - 200) * t)
+            b = int(60 + (40 - 60) * t)
+            return (r, g, b)
+        t = (chaos - 67) / 33.0 if chaos > 67 else 0
+        r = 220
+        g = int(200 - 160 * t)
+        b = 40
+        return (r, g, b)
+
+    def get_chaos_text_offset(self):
+        if self.ui_state not in ("game", "replay"):
+            return (0, 0)
+        chaos = self.get_chaos_value()
+        if chaos < 80:
+            return (0, 0)
+        if chaos >= 90:
+            intensity = 4
+        else:
+            intensity = 2
+        t = time.time()
+        ox = int(math.sin(t * 6.5) * intensity)
+        oy = int(math.cos(t * 5.2) * intensity)
+        return (ox, oy)
+
+    def draw_chaos_bar(self, screen, font, x, y, width=240, height=14):
+        chaos = self.get_chaos_value()
+        back_rect = pygame.Rect(x, y, width, height)
+        pygame.draw.rect(screen, (40, 40, 40), back_rect, border_radius=6)
+        fill_w = int(width * (chaos / 100.0))
+        if fill_w > 0:
+            fill_rect = pygame.Rect(x, y, fill_w, height)
+            pygame.draw.rect(screen, self.chaos_bar_color(chaos), fill_rect, border_radius=6)
+        pygame.draw.rect(screen, (120, 120, 120), back_rect, 1, border_radius=6)
+
+    def apply_chaos_visuals(self, screen):
+        if self.ui_state not in ("game", "replay"):
+            return
+        chaos = self.get_chaos_value()
+        if chaos <= 80:
+            return
+        tint_strength = min(1.0, (chaos - 80) / 20.0)
+        alpha = int((200 if chaos >= 90 else 120) * tint_strength)
+        if alpha > 0:
+            overlay = pygame.Surface((self.winw, self.winh), pygame.SRCALPHA)
+            overlay.fill((160, 30, 30, alpha))
+            screen.blit(overlay, (0, 0))
+        if chaos >= 90:
+            w, h = screen.get_size()
+            scale = 0.985
+            sw, sh = max(1, int(w * scale)), max(1, int(h * scale))
+            small = pygame.transform.smoothscale(screen, (sw, sh))
+            temp = pygame.Surface((w, h), pygame.SRCALPHA)
+            temp.blit(small, ((w - sw) // 2, (h - sh) // 2))
+            temp.set_alpha(120)
+            screen.blit(temp, (0, 0))
 
     def compute_final_score(self):
         if not self.state:
@@ -2866,6 +3354,7 @@ class Client:
         board_y = layout["board_y"]
         board_size = layout["board_size"]
         top_y = board_y - 64
+        ox, oy = self.get_chaos_text_offset()
 
         if self.state and hasattr(self.state, "players"):
             white_name = self.state.players.get("white") or "—"
@@ -2877,8 +3366,8 @@ class Client:
         text_color = self.colors["vanilla_secondary"]
         white_text = font.render(f"Білий: {white_name}", True, text_color)
         black_text = font.render(f"Чорний: {black_name}", True, text_color)
-        screen.blit(white_text, (board_x, top_y))
-        screen.blit(black_text, (board_x + board_size - black_text.get_width(), top_y))
+        screen.blit(white_text, (board_x + ox, top_y + oy))
+        screen.blit(black_text, (board_x + board_size - black_text.get_width() + ox, top_y + oy))
 
     def wrap_text(self, text, font, max_width):
         if not text:
@@ -2896,6 +3385,24 @@ class Client:
                 current = w
         if current:
             lines.append(current)
+        return lines
+
+    def clamp_wrapped_lines(self, text, font, max_width, max_lines):
+        lines = self.wrap_text(text, font, max_width)
+        if max_lines is None or max_lines <= 0:
+            return []
+        if len(lines) <= max_lines:
+            return lines
+        lines = lines[:max_lines]
+        last = lines[-1]
+        ell = "..."
+        if font.size(last + ell)[0] <= max_width:
+            lines[-1] = last + ell
+            return lines
+        trimmed = last
+        while trimmed and font.size(trimmed + ell)[0] > max_width:
+            trimmed = trimmed[:-1].rstrip()
+        lines[-1] = (trimmed + ell) if trimmed else ell
         return lines
 
     def get_popup_pattern(self):
@@ -3091,9 +3598,10 @@ class Client:
         rect = layout["panel_rect"]
         pygame.draw.rect(screen, self.colors["vanilla_panel"], rect, border_radius=8)
         pygame.draw.rect(screen, self.colors["vanilla_panel_border"], rect, 2, border_radius=8)
+        ox, oy = self.get_chaos_text_offset()
 
         title = big_font.render("DLC", True, self.colors["vanilla_secondary"])
-        screen.blit(title, (rect.x + 16, rect.y + 12))
+        screen.blit(title, (rect.x + 16 + ox, rect.y + 12 + oy))
 
         y = rect.y + 54
         if self.state and getattr(self.state, "dlc_packs", None):
@@ -3106,11 +3614,13 @@ class Client:
                     header_color = self.colors["mine_primary"]
                 elif pack.get("id") == "chessplus":
                     header_color = self.colors["chessplus_primary"]
-                header = font.render(f"{name} ({size})", True, header_color)
-                screen.blit(header, (rect.x + 16, y))
+                header_text = f"{name} ({size})"
+                header = self.fit_text_surface(font, header_text, rect.width - 32, header_color, max_height=20)
+                screen.blit(header, (rect.x + 16 + ox, y + oy))
                 y += 22
-                status = font.render(f"Статус: {'активний' if active else 'неактивний'}", True, (200,200,200))
-                screen.blit(status, (rect.x + 24, y))
+                status_text = f"Статус: {'активний' if active else 'неактивний'}"
+                status = self.fit_text_surface(font, status_text, rect.width - 40, (200,200,200), max_height=18)
+                screen.blit(status, (rect.x + 24 + ox, y + oy))
                 y += 20
                 if active and pack.get("next_effect_in") is not None:
                     nxt = pack.get("next_effect_in")
@@ -3120,56 +3630,122 @@ class Client:
                         info_color = self.colors["chessplus_secondary"]
                     else:
                         info_color = (200,200,200)
-                    info = font.render(f"Наст. ефект: {nxt} ход(и)", True, info_color)
-                    screen.blit(info, (rect.x + 24, y))
+                    info_text = f"Наст. ефект: {nxt} ход(и)"
+                    info = self.fit_text_surface(font, info_text, rect.width - 40, info_color, max_height=18)
+                    screen.blit(info, (rect.x + 24 + ox, y + oy))
                     y += 20
                 y += 8
         else:
             empty = font.render("Нема DLC паків", True, (190,190,190))
-            screen.blit(empty, (rect.x + 16, y))
+            screen.blit(empty, (rect.x + 16 + ox, y + oy))
 
-        self.draw_inventory(screen, font, rect)
+        status_rect = pygame.Rect(rect.x + 12, rect.bottom - 130, rect.width - 24, 120)
 
-    def draw_inventory(self, screen, font, panel_rect):
+        # error text under DLC list
+        if self.last_error:
+            err_text = self.error_text(self.last_error)
+            err_line = f"Помилка: {err_text}"
+            line_h = font.get_height() + 2
+            status_top = status_rect.top
+            available = max(0, status_top - y - 8)
+            max_lines = max(1, available // max(1, line_h)) if available > 0 else 1
+            lines = self.clamp_wrapped_lines(err_line, font, rect.width - 32, max_lines)
+            box_h = len(lines) * line_h + 8
+            box_y = y + 4
+            if box_y + box_h > status_top - 4:
+                box_y = status_top - box_h - 4
+            box_rect = pygame.Rect(rect.x + 12, box_y, rect.width - 24, box_h)
+            pygame.draw.rect(screen, (80, 40, 40), box_rect, border_radius=6)
+            pygame.draw.rect(screen, (180, 80, 80), box_rect, 1, border_radius=6)
+            ty = box_rect.y + 4
+            for line in lines:
+                surf = font.render(line, True, (240, 200, 200))
+                screen.blit(surf, (box_rect.x + 8, ty))
+                ty += line_h
+
+        self.draw_status_panel(screen, font, status_rect)
+
+    def draw_status_panel(self, screen, font, rect):
+        pygame.draw.rect(screen, (44, 36, 58), rect, border_radius=8)
+        pygame.draw.rect(screen, self.colors["vanilla_button_border"], rect, 2, border_radius=8)
+        ox, oy = self.get_chaos_text_offset()
+        x = rect.x + 12 + ox
+        y = rect.y + 10 + oy
+        color_map = {"white": "білий", "black": "чорний"}
+        lines = []
+        if self.state:
+            turn_color = color_map.get(self.state.turn, self.state.turn)
+            turn_number = self.state.move_count + 1
+            lines.append(f"Хід: {turn_color}, № {turn_number}")
+        else:
+            lines.append("Очікуємо гравців...")
+        lines.append(f"Таймер: {self.get_timer_display()}")
+        lines.append(f"Партія № {self.game_id if self.game_id is not None else '--'}")
+        if self.item_target_mode:
+            if self.item_target_phase == "piece":
+                lines.append("Вибрати фігуру для ефекту")
+            else:
+                lines.append("Вибрати ціль ефекту")
+        line_h = font.get_height() + 2
+        max_lines = max(1, (rect.height - 34) // line_h)
+        lines = lines[:max_lines]
+        for line in lines:
+            txt = self.fit_text_surface(font, line, rect.width - 24, (230, 230, 230), max_height=18)
+            screen.blit(txt, (x, y))
+            y += line_h
+        bar_w = rect.width - 24
+        self.draw_chaos_bar(screen, font, rect.x + 12 + ox, rect.bottom - 26 + oy, width=bar_w, height=18)
+
+    def draw_inventory_bar(self, screen):
         inv = self.get_my_inventory()
-        label = font.render("Інвентар", True, self.colors["vanilla_secondary"])
-        label_y = panel_rect.bottom - 78
-        screen.blit(label, (panel_rect.x + 16, label_y))
+        gap = 8
+        slot_size = min(70, max(48, int((self.winw - 2 * self.margin - gap * 8) / 9)))
+        total_slots_w = slot_size * 9 + gap * 8
+        bar_w = total_slots_w + 24
+        bar_h = slot_size + 12
+        x = (self.winw - bar_w) // 2
+        y = self.winh - bar_h - 10
+        bar_rect = pygame.Rect(x, y, bar_w, bar_h)
+        pygame.draw.rect(screen, (50, 44, 66), bar_rect, border_radius=10)
+        pygame.draw.rect(screen, self.colors["vanilla_button_border"], bar_rect, 2, border_radius=10)
 
-        slot_size = 40
-        gap = 6
-        total_w = slot_size * 9 + gap * 8
-        start_x = panel_rect.x + (panel_rect.w - total_w) // 2
-        y = panel_rect.bottom - 44
+        start_x = bar_rect.x + (bar_rect.width - total_slots_w) // 2
+        slot_y = bar_rect.y + (bar_rect.height - slot_size) // 2
         item_font = self.get_font("main", 18)
+        uses_font = self.get_font("uses", max(12, int(slot_size * 0.28)))
+        self.inventory_slot_rects = {}
+        slot_img = self.get_inventory_slot_image(slot_size)
 
         for i in range(9):
-            x = start_x + i * (slot_size + gap)
-            rect = pygame.Rect(x, y, slot_size, slot_size)
-            base_color = (70, 70, 70)
-            if self.selected_item_slot == i:
-                base_color = self.colors["vanilla_primary"]
-            pygame.draw.rect(screen, base_color, rect, border_radius=4)
-            pygame.draw.rect(screen, self.colors["vanilla_button_border"], rect, 2, border_radius=4)
-
-            num = item_font.render(str(i+1), True, (240,240,240))
-            screen.blit(num, (rect.x + 3, rect.y + 2))
+            sx = start_x + i * (slot_size + gap)
+            rect = pygame.Rect(sx, slot_y, slot_size, slot_size)
+            self.inventory_slot_rects[i] = rect
+            if slot_img:
+                screen.blit(slot_img, rect.topleft)
+                if self.selected_item_slot == i:
+                    pygame.draw.rect(screen, self.colors["vanilla_primary"], rect, 2, border_radius=6)
+            else:
+                base_color = (70, 70, 70)
+                if self.selected_item_slot == i:
+                    base_color = self.colors["vanilla_primary"]
+                pygame.draw.rect(screen, base_color, rect, border_radius=6)
+                pygame.draw.rect(screen, self.colors["vanilla_button_border"], rect, 2, border_radius=6)
 
             item = inv[i] if i < len(inv) else None
             if item:
                 effect_id = item.get("effect_id")
-                icon = self.get_item_image(effect_id, 24)
+                icon = self.get_item_image(effect_id, int(slot_size * 0.6))
                 if icon:
                     screen.blit(icon, icon.get_rect(center=rect.center))
                 else:
                     name = item.get("name", "")
                     short = name if len(name) <= 6 else name[:6] + "."
-                    txt = item_font.render(short, True, (230,230,230))
-                    screen.blit(txt, (rect.x + 4, rect.y + 20))
+                    txt = item_font.render(short, True, (230, 230, 230))
+                    screen.blit(txt, (rect.x + 4, rect.y + int(slot_size * 0.45)))
                 uses = item.get("uses")
                 if uses is not None:
-                    uses_txt = item_font.render(str(uses), True, (230,230,230))
-                    screen.blit(uses_txt, (rect.right - 10, rect.bottom - 14))
+                    uses_txt = uses_font.render(str(uses), True, (0, 0, 0))
+                    screen.blit(uses_txt, (rect.right - uses_txt.get_width() - 4, rect.bottom - uses_txt.get_height() - 3))
 
     def draw_game_over(self, screen, big_font, font, mouse_pos):
         overlay = pygame.Surface((self.winw, self.winh), pygame.SRCALPHA)

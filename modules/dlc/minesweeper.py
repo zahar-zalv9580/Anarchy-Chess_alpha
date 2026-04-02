@@ -109,6 +109,7 @@ def trigger_mine(state, x, y):
     q = deque()
     q.append((x,y))
     exploded = set()
+    removed = set()
     while q:
         cx, cy = q.popleft()
         if (cx,cy) in exploded: 
@@ -120,12 +121,20 @@ def trigger_mine(state, x, y):
                 if 0 <= nx < 8 and 0 <= ny < 8:
                     piece = state.board.get_piece(nx, ny)
                     if piece:
+                        gid = getattr(piece, "gid", None)
+                        key = gid if gid is not None else id(piece)
+                        if key in removed:
+                            continue
+                        removed.add(key)
                         # if piece is royal adjust counts
                         if piece.is_royal:
                             if piece.color in state.royal_counts:
                                 state.royal_counts[piece.color] -= 1
                         # remove piece
-                        state.board.set_piece(nx, ny, None)
+                        if hasattr(state.board, "clear_piece"):
+                            state.board.clear_piece(nx, ny)
+                        else:
+                            state.board.set_piece(nx, ny, None)
         # chain: add adjacent mines (including diagonals)
         for nx in range(cx-1, cx+2):
             for ny in range(cy-1, cy+2):

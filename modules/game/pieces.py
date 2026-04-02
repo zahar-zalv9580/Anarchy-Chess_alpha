@@ -1,11 +1,56 @@
-import itertools
+ROYAL_TYPES = {"king", "queen", "amazon"}
+PIECE_SIZES = {"giant_pawn": 2}
+
+
+def piece_size(ptype):
+    return PIECE_SIZES.get(ptype, 1)
+
+
+def is_royal_type(ptype):
+    return ptype in ROYAL_TYPES
+
+
+def apply_piece_type(piece, ptype, anchor=None):
+    piece.ptype = ptype
+    piece.is_royal = is_royal_type(ptype)
+    piece.size = piece_size(ptype)
+    if anchor is not None:
+        piece.anchor = tuple(anchor)
+    elif piece.size == 1:
+        piece.anchor = piece.anchor or None
+
+
+_gid_next = 1
+
+
+def _next_gid():
+    global _gid_next
+    gid = _gid_next
+    _gid_next += 1
+    return gid
+
+
+def ensure_gid_at_least(value):
+    global _gid_next
+    try:
+        v = int(value)
+    except Exception:
+        return
+    if v >= _gid_next:
+        _gid_next = v + 1
+
 
 class Piece:
-    def __init__(self, ptype, color, pid=None):
-        self.ptype = ptype  
+    def __init__(self, ptype, color, pid=None, size=None, anchor=None):
+        self.ptype = ptype
         self.color = color
-        self.id = pid
-        self.is_royal = (ptype in ('king','queen'))
+        self.gid = _next_gid() if pid is None else pid
+        if pid is not None:
+            ensure_gid_at_least(pid)
+        self.id = self.gid
+        self.size = piece_size(ptype) if size is None else size
+        self.anchor = tuple(anchor) if anchor is not None else None
+        self.is_royal = is_royal_type(ptype)
 
 
 def starting_setup(board):

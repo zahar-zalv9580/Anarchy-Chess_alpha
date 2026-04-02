@@ -31,6 +31,8 @@ class GameState:
         self.chessplus_clones = {}
         self.chessplus_nukes = []
         self.nuke_event_id = 0
+        self.chaos = 0
+        self.extra_piece_types = []
 
     def setup_starting_position(self):
         starting_setup(self.board)
@@ -43,7 +45,17 @@ class GameState:
             for x in range(8):
                 p = self.board.get_piece(x,y)
                 if p:
-                    row.append({"ptype":p.ptype,"color":p.color})
+                    cell = {"ptype": p.ptype, "color": p.color}
+                    gid = getattr(p, "gid", None)
+                    if gid is not None:
+                        cell["gid"] = gid
+                    size = getattr(p, "size", None)
+                    if size is not None and int(size) > 1:
+                        cell["size"] = int(size)
+                    anchor = getattr(p, "anchor", None)
+                    if anchor is not None:
+                        cell["anchor"] = [int(anchor[0]), int(anchor[1])]
+                    row.append(cell)
                 else:
                     row.append(None)
             board_serial.append(row)
@@ -73,6 +85,8 @@ class GameState:
             "chessplus_clones": self.chessplus_clones,
             "chessplus_nukes": self.chessplus_nukes,
             "nuke_event_id": self.nuke_event_id,
+            "chaos": self.chaos,
+            "extra_piece_types": self.extra_piece_types,
         }
 
     @staticmethod
@@ -84,12 +98,26 @@ class GameState:
         s.players = d.get('players', {"white": None, "black": None})
         # board
         b = d.get('board', [])
+        pieces_by_gid = {}
         for y in range(8):
             for x in range(8):
                 cell = b[y][x]
                 if cell:
                     from modules.game.pieces import Piece
-                    s.board.set_piece(x,y, Piece(cell['ptype'], cell['color']))
+                    gid = cell.get("gid") if isinstance(cell, dict) else None
+                    if gid is not None and gid in pieces_by_gid:
+                        p = pieces_by_gid[gid]
+                    else:
+                        p = Piece(
+                            cell.get("ptype"),
+                            cell.get("color"),
+                            pid=gid,
+                            size=cell.get("size"),
+                            anchor=cell.get("anchor"),
+                        )
+                        if gid is not None:
+                            pieces_by_gid[gid] = p
+                    s.board.set_piece(x, y, p)
         s.mines = d.get('mines', [[0]*8 for _ in range(8)])
         s.revealed = d.get('revealed', [[0]*8 for _ in range(8)])
         s.adj_counts = d.get('adj_counts', [[0]*8 for _ in range(8)])
@@ -110,4 +138,6 @@ class GameState:
         s.chessplus_clones = d.get('chessplus_clones', {})
         s.chessplus_nukes = d.get('chessplus_nukes', [])
         s.nuke_event_id = d.get('nuke_event_id', 0)
+        s.chaos = d.get('chaos', 0)
+        s.extra_piece_types = d.get('extra_piece_types', [])
         return s

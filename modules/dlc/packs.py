@@ -1,6 +1,7 @@
 ﻿import random
 from modules.dlc.minesweeper import spawn_mines, temp_reveal_numbers, trigger_mine
 from modules.dlc.chessplus import spawn_cells, spawn_void, spawn_wall, apply_pawn_mutations
+from modules.dlc.piecesexpansion import spawn_random_piece, change_random_piece, piece_display_name, PIECE_TYPES
 
 RARITY_WEIGHTS = {
     "common": 50,
@@ -175,6 +176,31 @@ PACK_DEFS = [
             },
         ],
     },
+    {
+        "id": "piecesexpansion",
+        "name": "Pieces Expansion DLC",
+        "size": "large",
+        "theme_color": [160, 190, 240],
+        "piece_types": list(PIECE_TYPES),
+        "effects": [
+            {
+                "id": "pe_spawn_piece",
+                "name": "Спавн фігури",
+                "rarity": "common",
+                "spawn_limit": 3,
+                "effect_type": "piece_spawn",
+                "is_item": False,
+            },
+            {
+                "id": "pe_change_piece",
+                "name": "Зміна фігури",
+                "rarity": "rare",
+                "spawn_limit": 2,
+                "effect_type": "rule_change",
+                "is_item": False,
+            },
+        ],
+    },
 ]
 
 
@@ -237,7 +263,22 @@ def activate_pack(pack_state, pack_def):
             eff_state["remaining"] = roll_spawn_limit(eff_def.get("spawn_limit", 1))
 
 
-def choose_effect(pack_state, pack_def):
+def chaos_weight_multiplier(rarity, chaos):
+    if chaos < 25:
+        return 1.0
+    factor = min(1.0, max(0.0, (chaos - 25) / 75.0))
+    if rarity == "legendary":
+        return 1.0 + 2.5 * factor
+    if rarity == "epic":
+        return 1.0 + 1.5 * factor
+    if rarity == "rare":
+        return 1.0 + 0.8 * factor
+    if rarity == "uncommon":
+        return 1.0 + 0.4 * factor
+    return 1.0
+
+
+def choose_effect(pack_state, pack_def, chaos=0):
     candidates = []
     for eff_state in pack_state["effects"]:
         if eff_state.get("remaining", 0) <= 0:
@@ -245,7 +286,8 @@ def choose_effect(pack_state, pack_def):
         eff_def = get_effect_def(pack_def, eff_state["id"])
         if not eff_def:
             continue
-        weight = RARITY_WEIGHTS.get(eff_def.get("rarity", "common"), 1)
+        base_weight = RARITY_WEIGHTS.get(eff_def.get("rarity", "common"), 1)
+        weight = base_weight * chaos_weight_multiplier(eff_def.get("rarity"), chaos)
         candidates.append((eff_def, eff_state, weight))
     if not candidates:
         return None, None
@@ -269,7 +311,7 @@ def make_item(effect_def):
     }
 
 
-def apply_effect(effect_def, state):
+def apply_effect(effect_def, state, current_color=None):
     effect_id = effect_def["id"]
     if effect_id == "ms_spawn_mine":
         coords = spawn_mines(state, count=1)
@@ -350,6 +392,39 @@ def apply_effect(effect_def, state):
         return {
             "message": f"Мутації пішаків: {len(muts)}",
             "event": {"name": "PawnMutation", "etype": "piece", "target": muts, "extra": f"count:{len(muts)}"},
+        }
+
+    if effect_id == "pe_spawn_piece":
+        color = random.choice(["white", "black"])
+        result = spawn_random_piece(state, color)
+        if not result:
+            return {
+                "popup": "Спавн фігури",
+                "event": {"name": "SpawnPiece", "etype": "piece", "target": None, "extra": "no_space"},
+            }
+        ptype = result.get("ptype")
+        pos = result.get("pos")
+        name = piece_display_name(ptype)
+        return {
+            "popup": f"Спавн: {name}",
+            "event": {"name": "SpawnPiece", "etype": "piece", "target": list(pos), "extra": f"{color}:{ptype}"},
+        }
+
+    if effect_id == "pe_change_piece":
+        result = change_random_piece(state)
+        if not result:
+            return {
+                "popup": "Зміна фігури",
+                "event": {"name": "ChangePiece", "etype": "piece", "target": None, "extra": "none"},
+            }
+        old_type = result.get("from")
+        new_type = result.get("to")
+        color = result.get("color")
+        pos = result.get("pos")
+        name = piece_display_name(new_type)
+        return {
+            "popup": f"Зміна: {name}",
+            "event": {"name": "ChangePiece", "etype": "piece", "target": list(pos), "extra": f"{color}:{old_type}->{new_type}"},
         }
 
     return None
