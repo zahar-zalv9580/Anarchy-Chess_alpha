@@ -1,4 +1,4 @@
-﻿import socket, threading, json, time, sys, random
+﻿import socket, threading, json, time, sys, random, math
 from pathlib import Path
 
 # Allow running this file directly without "python -m".
@@ -7,8 +7,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 from modules.game.state import GameState
 from modules.game.rules import validate_move, apply_move
+from modules.game.pieces import Piece, piece_size
 from modules.dlc.minesweeper import reveal_cell, trigger_mine, place_mine
 from modules.dlc.chessplus import mutate_piece_randomly, clone_piece
+from modules.dlc.piecesexpansion import piece_display_name
 from modules.dlc.packs import (
     PACK_DEFS,
     build_pack_states,
@@ -24,6 +26,7 @@ HOST = cfg.SERVER_HOST
 PORT = cfg.SERVER_PORT
 GAME_DATA_PATH = PROJECT_ROOT / "data" / "game.json"
 MATCH_LOG_DIR = PROJECT_ROOT / "data" / "match_logs"
+WALLETS_PATH = PROJECT_ROOT / "data" / "wallets.json"
 
 def load_game_id():
     if not GAME_DATA_PATH.exists():
@@ -40,6 +43,23 @@ def save_game_id(game_id):
     GAME_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
     with GAME_DATA_PATH.open("w", encoding="utf-8") as f:
         json.dump({"game_id": game_id}, f, ensure_ascii=False, indent=2)
+
+def load_wallets():
+    if not WALLETS_PATH.exists():
+        return {}
+    try:
+        with WALLETS_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return {str(k): int(v) for k, v in data.items()}
+    except Exception:
+        return {}
+    return {}
+
+def save_wallets(wallets):
+    WALLETS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with WALLETS_PATH.open("w", encoding="utf-8") as f:
+        json.dump(wallets, f, ensure_ascii=False, indent=2)
 
 def count_royals(state):
     counts = {"white": 0, "black": 0}
@@ -129,6 +149,8 @@ class Room:
         self.next_pack_index = 0
         self.state.dlc_packs = build_pack_states(self.pack_defs)
         self.state.inventory = {"white": [None]*9, "black": [None]*9}
+        self.state.coins = {"white": 0, "black": 0}
+        self.state.shop = {"offers": [], "last_refresh": 0}
         self.log_lock = threading.Lock()
         self.match_log = None
         self.log_path = None
@@ -139,6 +161,9 @@ class Room:
         self.pending_pack_events = []
         self.pending_event_summaries = []
         self.pending_chaos = None
+        self.pending_coin = None
+        self.wallets = load_wallets()
+        self.shop_offer_seq = 0
 
     def coord_to_alg(self, pos):
         if pos is None:
@@ -171,6 +196,23 @@ class Room:
         if piece is None:
             return self.coord_to_alg(pos)
         return f"{self.piece_short(piece)}@{self.coord_to_alg(pos)}"
+
+    def collect_piece_map(self):
+        mapping = {}
+        seen = set()
+        for y in range(8):
+            for x in range(8):
+                p = self.state.board.get_piece(x, y)
+                if not p:
+                    continue
+                key = getattr(p, "gid", None)
+                if key is None:
+                    key = id(p)
+                if key in seen:
+                    continue
+                seen.add(key)
+                mapping[key] = {"ptype": p.ptype, "color": p.color}
+        return mapping
 
     def init_match_log(self):
         MATCH_LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -222,14 +264,84 @@ class Room:
             return self.fix_mojibake(obj)
         return obj
 
-    def begin_chaos_action(self):
+    def get_wallet_balance(self, name):
+        if not name:
+            return 0
+        return int(self.wallets.get(str(name), 0))
+
+    def set_wallet_balance(self, name, amount):
+        if not name:
+            return
+        self.wallets[str(name)] = int(max(0, amount))
+        save_wallets(self.wallets)
+
+    def adjust_wallet(self, name, delta):
+        if not name:
+            return
+        current = self.get_wallet_balance(name)
+        self.set_wallet_balance(name, current + int(delta))
+
+    def sync_player_wallets(self):
+        if not hasattr(self.state, "coins"):
+            self.state.coins = {"white": 0, "black": 0}
+        for color in ("white", "black"):
+            name = self.state.players.get(color) if hasattr(self.state, "players") else None
+            if name:
+                self.state.coins[color] = self.get_wallet_balance(name)
+
+    def award_coins(self, color, amount, reason=None):
+        if amount <= 0 or not color:
+            return
+        if not hasattr(self.state, "coins"):
+            self.state.coins = {"white": 0, "black": 0}
+        self.state.coins[color] = int(self.state.coins.get(color, 0)) + int(amount)
+        name = self.state.players.get(color) if hasattr(self.state, "players") else None
+        if name:
+            self.adjust_wallet(name, amount)
+        # optional log
+        self.queue_log_entry({
+            "type": "coins",
+            "color": color,
+            "amount": int(amount),
+            "reason": reason or "",
+            "text": f"Coins {color} +{int(amount)}",
+        })
+
+    def spend_coins(self, color, amount):
+        if amount <= 0 or not color:
+            return False
+        if not hasattr(self.state, "coins"):
+            self.state.coins = {"white": 0, "black": 0}
+        current = int(self.state.coins.get(color, 0))
+        if current < amount:
+            return False
+        self.state.coins[color] = current - int(amount)
+        name = self.state.players.get(color) if hasattr(self.state, "players") else None
+        if name:
+            self.adjust_wallet(name, -amount)
+        return True
+
+    def capture_coin_value(self, ptype):
+        if not ptype:
+            return 0
+        if ptype in cfg.ROYAL_TYPES:
+            return int(getattr(cfg, "COIN_CAPTURE_ROYAL", 15))
+        if ptype in ("rook", "archbishop", "giant_pawn"):
+            return int(getattr(cfg, "COIN_CAPTURE_ROOK", 6))
+        if ptype == "pawn":
+            return int(getattr(cfg, "COIN_CAPTURE_PAWN", 2))
+        return int(getattr(cfg, "COIN_CAPTURE_MINOR", 4))
+
+    def begin_chaos_action(self, color=None):
         self.pending_chaos = {
             "capture": False,
             "explosions": 0,
             "item_used": 0,
             "effects": False,
             "other": 0,
+            "color": color,
         }
+        self.pending_coin = {"color": color, "explosions": 0}
 
     def mark_chaos_capture(self):
         if self.pending_chaos is not None:
@@ -269,7 +381,17 @@ class Room:
                 delta -= 2
         chaos = max(0, min(100, chaos + delta))
         self.state.chaos = chaos
+
+        # coins for explosions / chain reactions
+        if self.pending_coin is not None:
+            color = self.pending_coin.get("color") or self.pending_chaos.get("color") or getattr(self.state, "turn", None)
+            explosions = int(self.pending_coin.get("explosions", 0))
+            if explosions > 0:
+                self.award_coins(color, explosions * int(getattr(cfg, "COIN_EXPLOSION", 2)), reason="explosion")
+            if explosions >= 2:
+                self.award_coins(color, int(getattr(cfg, "COIN_CHAIN", 4)), reason="chain")
         self.pending_chaos = None
+        self.pending_coin = None
 
     def chaos_level(self):
         return int(getattr(self.state, "chaos", 0))
@@ -285,6 +407,157 @@ class Room:
         if chaos >= 20:
             return 4
         return 5
+
+    def next_shop_offer_id(self):
+        self.shop_offer_seq += 1
+        return f"shop_{self.shop_offer_seq}"
+
+    def shop_discount_factor(self):
+        chaos = self.chaos_level()
+        max_disc = float(getattr(cfg, "SHOP_MAX_DISCOUNT", 0.35))
+        return min(max_disc, max_disc * (chaos / 100.0))
+
+    def apply_shop_discount(self, price):
+        discount = self.shop_discount_factor()
+        final_price = int(math.ceil(float(price) * (1.0 - discount)))
+        return max(1, final_price)
+
+    def price_from_range(self, rng, fallback=10):
+        if isinstance(rng, (list, tuple)) and len(rng) == 2:
+            return random.randint(int(rng[0]), int(rng[1]))
+        try:
+            return int(rng)
+        except Exception:
+            return int(fallback)
+
+    def build_shop_offer_effect(self, pack_state, pack_def, eff_def):
+        rarity = eff_def.get("rarity", "common")
+        base = self.price_from_range(getattr(cfg, "SHOP_EFFECT_PRICE", {}).get(rarity), fallback=8)
+        price = self.apply_shop_discount(base)
+        return {
+            "id": self.next_shop_offer_id(),
+            "type": "effect",
+            "name": eff_def.get("name") or eff_def.get("id"),
+            "pack_id": pack_state.get("id"),
+            "pack_name": pack_def.get("name"),
+            "rarity": rarity,
+            "effect_id": eff_def.get("id"),
+            "price": price,
+        }
+
+    def build_shop_offer_item(self, pack_def, eff_def):
+        rarity = eff_def.get("rarity", "common")
+        base = self.price_from_range(getattr(cfg, "SHOP_ITEM_PRICE", {}).get(rarity), fallback=10)
+        price = self.apply_shop_discount(base)
+        return {
+            "id": self.next_shop_offer_id(),
+            "type": "item",
+            "name": eff_def.get("name") or eff_def.get("id"),
+            "pack_id": pack_def.get("id"),
+            "pack_name": pack_def.get("name"),
+            "rarity": rarity,
+            "effect_id": eff_def.get("id"),
+            "price": price,
+        }
+
+    def build_shop_offer_piece(self, pack_def, ptype):
+        base = int(getattr(cfg, "SHOP_PIECE_BASE", 6)) + int(getattr(cfg, "SHOP_PIECE_MULT", 2)) * int(cfg.PIECE_VALUES.get(ptype, 1))
+        price = self.apply_shop_discount(base)
+        return {
+            "id": self.next_shop_offer_id(),
+            "type": "piece",
+            "name": piece_display_name(ptype),
+            "pack_id": pack_def.get("id"),
+            "pack_name": pack_def.get("name"),
+            "ptype": ptype,
+            "price": price,
+        }
+
+    def build_shop_offer_pack(self, pack_def):
+        size = pack_def.get("size", "medium")
+        base = self.price_from_range(getattr(cfg, "SHOP_PACK_PRICE", {}).get(size), fallback=30)
+        price = self.apply_shop_discount(base)
+        return {
+            "id": self.next_shop_offer_id(),
+            "type": "pack",
+            "name": pack_def.get("name") or pack_def.get("id"),
+            "pack_id": pack_def.get("id"),
+            "pack_name": pack_def.get("name"),
+            "size": size,
+            "price": price,
+        }
+
+    def generate_shop_offers(self):
+        offers = []
+        active_pack_states = [p for p in self.state.dlc_packs if p.get("active")]
+        active_pack_ids = {p.get("id") for p in active_pack_states}
+        active_pack_defs = [self.pack_def_by_id.get(pid) or get_pack_def(pid) for pid in active_pack_ids]
+        active_pack_defs = [p for p in active_pack_defs if p]
+
+        # effects (non-items)
+        effect_pool = []
+        for pack_state in active_pack_states:
+            pack_def = self.pack_def_by_id.get(pack_state.get("id")) or get_pack_def(pack_state.get("id"))
+            if not pack_def:
+                continue
+            for eff_def in pack_def.get("effects", []):
+                if eff_def.get("is_item"):
+                    continue
+                eff_state = next((e for e in pack_state.get("effects", []) if e.get("id") == eff_def.get("id")), None)
+                if eff_state is not None and eff_state.get("remaining", 0) <= 0:
+                    continue
+                effect_pool.append((pack_state, pack_def, eff_def))
+        random.shuffle(effect_pool)
+        for pack_state, pack_def, eff_def in effect_pool[: int(getattr(cfg, "SHOP_EFFECT_OFFERS", 3))]:
+            offers.append(self.build_shop_offer_effect(pack_state, pack_def, eff_def))
+
+        # items
+        item_pool = []
+        for pack_def in active_pack_defs:
+            for eff_def in pack_def.get("effects", []):
+                if eff_def.get("is_item"):
+                    item_pool.append((pack_def, eff_def))
+        random.shuffle(item_pool)
+
+        # pieces from active packs
+        piece_pool = []
+        for pack_def in active_pack_defs:
+            for ptype in pack_def.get("piece_types", []) or []:
+                piece_pool.append((pack_def, ptype))
+        random.shuffle(piece_pool)
+
+        item_count = int(getattr(cfg, "SHOP_ITEM_OFFERS", 5))
+        piece_count = 0
+        if piece_pool:
+            piece_count = 1 if len(piece_pool) == 1 else random.choice([1, 2])
+            piece_count = min(piece_count, item_count)
+        if not item_pool:
+            piece_count = min(item_count, max(piece_count, min(2, len(piece_pool))))
+        item_count = max(0, item_count - piece_count)
+
+        for pack_def, ptype in piece_pool[:piece_count]:
+            offers.append(self.build_shop_offer_piece(pack_def, ptype))
+        for pack_def, eff_def in item_pool[:item_count]:
+            offers.append(self.build_shop_offer_item(pack_def, eff_def))
+
+        # packs
+        inactive_defs = [p for p in self.pack_defs if p.get("id") not in active_pack_ids]
+        random.shuffle(inactive_defs)
+        for pack_def in inactive_defs[: int(getattr(cfg, "SHOP_PACK_OFFERS", 2))]:
+            offers.append(self.build_shop_offer_pack(pack_def))
+
+        return offers
+
+    def refresh_shop_offers(self, force=False):
+        if not hasattr(self.state, "shop") or self.state.shop is None:
+            self.state.shop = {"offers": [], "last_refresh": 0}
+        last_refresh = int(self.state.shop.get("last_refresh", 0))
+        interval = int(getattr(cfg, "SHOP_REFRESH_MOVES", 5))
+        if not force and (self.move_count - last_refresh) < interval:
+            return False
+        self.state.shop["offers"] = self.generate_shop_offers()
+        self.state.shop["last_refresh"] = int(self.move_count)
+        return True
 
     def ensure_min_active_packs(self, target_active):
         if target_active <= 0 or not self.state.dlc_packs:
@@ -429,7 +702,7 @@ class Room:
         self.pending_log_entries = []
         self.pending_pack_events = []
         self.pending_event_summaries = []
-        self.begin_chaos_action()
+        self.begin_chaos_action(piece.color if piece else None)
 
     def finalize_move_log(self):
         if self.active_move_no is None or not self.active_move_info:
@@ -498,6 +771,8 @@ class Room:
             self.mark_chaos_effect("explosion")
         else:
             self.mark_chaos_effect("other")
+        if self.pending_coin is not None and name in ("Explosion", "Nuke"):
+            self.pending_coin["explosions"] = int(self.pending_coin.get("explosions", 0)) + 1
         entry = {
             "type": "event",
             "name": name,
@@ -541,6 +816,9 @@ class Room:
 
     def end_game(self, reason, winner=None):
         self.log_game_over(reason, winner)
+        if winner:
+            self.award_coins(winner, int(getattr(cfg, "COIN_WIN", 10)), reason="win")
+        self.broadcast_state()
         payload = {"type":"game_over", "reason": reason}
         if winner:
             payload["winner"] = winner
@@ -581,6 +859,8 @@ class Room:
             "text": "Game started",
             "players": dict(self.state.players),
         })
+        self.sync_player_wallets()
+        self.refresh_shop_offers(force=True)
         self.broadcast_state()
 
     def reset_game_state(self):
@@ -589,6 +869,8 @@ class Room:
         self.state.dlc_packs = build_pack_states(self.pack_defs)
         self.state.inventory = {"white": [None]*9, "black": [None]*9}
         self.state.extra_piece_types = []
+        self.state.coins = {"white": 0, "black": 0}
+        self.state.shop = {"offers": [], "last_refresh": 0}
         self.refresh_extra_piece_types()
         self.move_count = 0
         self.match_start_time = None
@@ -602,6 +884,8 @@ class Room:
         self.pending_log_entries = []
         self.pending_pack_events = []
         self.pending_event_summaries = []
+        self.pending_coin = None
+        self.shop_offer_seq = 0
 
     def set_enabled_packs(self, pack_ids):
         if not isinstance(pack_ids, list):
@@ -669,10 +953,25 @@ class Room:
                         if anchor is not None:
                             frm = anchor
 
+                    # update move_count & begin log/chaos tracking
+                    self.move_count += 1
+                    self.state.move_count = self.move_count
+                    self.begin_move_log(self.move_count, moving_piece, frm, to)
+
+                    pre_map = self.collect_piece_map()
                     # apply move (basic legality)
                     captured_positions, promoted = apply_move(self.state, frm, to)
-                    if captured_positions:
+                    post_map = self.collect_piece_map()
+                    captured_pieces = [pre_map[k] for k in pre_map if k not in post_map]
+                    if captured_pieces:
                         self.mark_chaos_capture()
+                        total = 0
+                        for info in captured_pieces:
+                            total += self.capture_coin_value(info.get("ptype"))
+                        if total > 0:
+                            self.award_coins(color, total, reason="capture")
+                    # survival coin per move
+                    self.award_coins(color, int(getattr(cfg, "COIN_SURVIVAL", 1)), reason="survival")
                     # clear statuses on captured piece
                     if captured_positions:
                         for cx, cy in captured_positions:
@@ -692,10 +991,6 @@ class Room:
                     self.move_positional(self.state.chessplus_mutations, frm, to)
                     self.move_positional(self.state.chessplus_clones, frm, to)
 
-                    # update move_count
-                    self.move_count += 1
-                    self.state.move_count = self.move_count
-                    self.begin_move_log(self.move_count, moving_piece, frm, to)
                     if promoted:
                         self.log_event("Promotion", "piece", self.piece_ref(to))
                     if self.move_count == 1:
@@ -718,9 +1013,10 @@ class Room:
                                 reveal_cell(self.state, cx, cy)
 
                     newly_activated = self.check_activate_packs()
-                    self.advance_pack_lifetimes(full_move_completed)
+                    deactivated = self.advance_pack_lifetimes(full_move_completed)
                     self.advance_pack_effects(current_color=color, skip_pack_ids=newly_activated)
                     self.apply_chaos_after_action(action_type="move")
+                    self.refresh_shop_offers(force=bool(newly_activated or deactivated))
                     winner, reason = check_royal_elimination(self.state)
                     if winner:
                         self.broadcast_state()
@@ -743,6 +1039,9 @@ class Room:
                     slot = msg.get('slot')
                     target = msg.get('target')
                     self.handle_item_use(conn, color, slot, target)
+                elif mtype == 'shop_buy':
+                    offer_id = msg.get('offer_id')
+                    self.handle_shop_buy(conn, color, offer_id)
                 elif mtype == 'join':
                     # handled at connection time
                     pass
@@ -811,7 +1110,7 @@ class Room:
 
     def advance_pack_lifetimes(self, full_move_completed=False):
         if not full_move_completed:
-            return
+            return False
         changed = False
         for pack_state in self.state.dlc_packs:
             if not pack_state.get("active"):
@@ -825,6 +1124,7 @@ class Room:
                 changed = True
         if changed:
             self.refresh_extra_piece_types()
+        return changed
 
     def advance_pack_effects(self, current_color, skip_pack_ids=None):
         if skip_pack_ids is None:
@@ -849,7 +1149,18 @@ class Room:
             if not pack_def:
                 pack_state["next_effect_in"] = min_interval or random.randint(1, 2)
                 continue
-            eff_def, eff_state = choose_effect(pack_state, pack_def, chaos=chaos)
+            eff_def = None
+            eff_state = None
+            forced_id = pack_state.get("forced_effect_id")
+            if forced_id:
+                eff_def = next((e for e in pack_def.get("effects", []) if e.get("id") == forced_id), None)
+                eff_state = next((e for e in pack_state.get("effects", []) if e.get("id") == forced_id), None)
+                if not eff_def or not eff_state or eff_state.get("remaining", 0) <= 0:
+                    eff_def = None
+                    eff_state = None
+                pack_state["forced_effect_id"] = None
+            if not eff_def or not eff_state:
+                eff_def, eff_state = choose_effect(pack_state, pack_def, chaos=chaos)
             if not eff_def or not eff_state:
                 pack_state["next_effect_in"] = None
                 continue
@@ -915,6 +1226,134 @@ class Room:
                 inv[i] = item
                 return True, i
         return False, None
+
+    def find_shop_offer(self, offer_id):
+        if not offer_id or not hasattr(self.state, "shop"):
+            return None
+        offers = self.state.shop.get("offers", [])
+        for offer in offers:
+            if offer.get("id") == offer_id:
+                return offer
+        return None
+
+    def remove_shop_offer(self, offer_id):
+        if not offer_id or not hasattr(self.state, "shop"):
+            return
+        offers = self.state.shop.get("offers", [])
+        self.state.shop["offers"] = [o for o in offers if o.get("id") != offer_id]
+
+    def handle_shop_buy(self, conn, color, offer_id):
+        offer = self.find_shop_offer(offer_id)
+        if not offer:
+            send_json(conn, {"type": "error", "msg": "shop_offer_invalid"})
+            return
+        price = int(offer.get("price") or 0)
+        if price <= 0:
+            send_json(conn, {"type": "error", "msg": "shop_offer_invalid"})
+            return
+        current = int(getattr(self.state, "coins", {}).get(color, 0))
+        if current < price:
+            send_json(conn, {"type": "error", "msg": "shop_insufficient_funds"})
+            return
+
+        otype = offer.get("type")
+        if otype == "effect":
+            pack_id = offer.get("pack_id")
+            effect_id = offer.get("effect_id")
+            pack_state = next((p for p in self.state.dlc_packs if p.get("id") == pack_id), None)
+            if not pack_state or not pack_state.get("active"):
+                send_json(conn, {"type": "error", "msg": "shop_pack_inactive"})
+                return
+            if pack_state.get("forced_effect_id"):
+                send_json(conn, {"type": "error", "msg": "shop_effect_pending"})
+                return
+            eff_state = next((e for e in pack_state.get("effects", []) if e.get("id") == effect_id), None)
+            if not eff_state or eff_state.get("remaining", 0) <= 0:
+                send_json(conn, {"type": "error", "msg": "shop_effect_unavailable"})
+                return
+            if not self.spend_coins(color, price):
+                send_json(conn, {"type": "error", "msg": "shop_insufficient_funds"})
+                return
+            pack_state["forced_effect_id"] = effect_id
+            self.remove_shop_offer(offer_id)
+            self.broadcast_state()
+            return
+
+        if otype == "item":
+            pack_id = offer.get("pack_id")
+            effect_id = offer.get("effect_id")
+            pack_state = next((p for p in self.state.dlc_packs if p.get("id") == pack_id), None)
+            if not pack_state or not pack_state.get("active"):
+                send_json(conn, {"type": "error", "msg": "shop_pack_inactive"})
+                return
+            pack_def = self.pack_def_by_id.get(pack_id) or get_pack_def(pack_id)
+            if not pack_def:
+                send_json(conn, {"type": "error", "msg": "shop_offer_invalid"})
+                return
+            eff_def = next((e for e in pack_def.get("effects", []) if e.get("id") == effect_id and e.get("is_item")), None)
+            if not eff_def:
+                send_json(conn, {"type": "error", "msg": "shop_offer_invalid"})
+                return
+            item = make_item(eff_def)
+            added, _ = self.add_item_to_inventory(color, item)
+            if not added:
+                send_json(conn, {"type": "error", "msg": "inventory_full"})
+                return
+            if not self.spend_coins(color, price):
+                send_json(conn, {"type": "error", "msg": "shop_insufficient_funds"})
+                return
+            self.remove_shop_offer(offer_id)
+            self.broadcast_state()
+            return
+
+        if otype == "piece":
+            pack_id = offer.get("pack_id")
+            ptype = offer.get("ptype")
+            pack_state = next((p for p in self.state.dlc_packs if p.get("id") == pack_id), None)
+            if not pack_state or not pack_state.get("active"):
+                send_json(conn, {"type": "error", "msg": "shop_pack_inactive"})
+                return
+            if not ptype:
+                send_json(conn, {"type": "error", "msg": "shop_offer_invalid"})
+                return
+            anchor = self.spawn_shop_piece(color, ptype)
+            if not anchor:
+                send_json(conn, {"type": "error", "msg": "shop_no_safe_cell"})
+                return
+            if not self.spend_coins(color, price):
+                send_json(conn, {"type": "error", "msg": "shop_insufficient_funds"})
+                return
+            self.remove_shop_offer(offer_id)
+            self.broadcast_state()
+            return
+
+        if otype == "pack":
+            pack_id = offer.get("pack_id")
+            pack_state = next((p for p in self.state.dlc_packs if p.get("id") == pack_id), None)
+            if not pack_state:
+                send_json(conn, {"type": "error", "msg": "shop_offer_invalid"})
+                return
+            if pack_state.get("active"):
+                send_json(conn, {"type": "error", "msg": "shop_pack_active"})
+                return
+            pack_def = self.pack_def_by_id.get(pack_id) or get_pack_def(pack_id)
+            if not pack_def:
+                send_json(conn, {"type": "error", "msg": "shop_offer_invalid"})
+                return
+            if not self.spend_coins(color, price):
+                send_json(conn, {"type": "error", "msg": "shop_insufficient_funds"})
+                return
+            activate_pack(pack_state, pack_def)
+            if self.chaos_level() >= 60:
+                pack_state["next_effect_in"] = 1
+            self.refresh_extra_piece_types()
+            self.refresh_shop_offers(force=True)
+            self.broadcast_popup(pack_state.get("name"), "Активація", pack_id)
+            self.remove_shop_offer(offer_id)
+            self.broadcast_state()
+            return
+
+        send_json(conn, {"type": "error", "msg": "shop_offer_invalid"})
 
     def choose_random_item_def(self):
         items = []
@@ -987,6 +1426,47 @@ class Room:
             self.clear_positional(self.state.chessplus_clones, (cx, cy))
             self.clear_positional(self.state.chessplus_burning, (cx, cy))
         return True
+
+    def safe_cell_for_spawn(self, x, y):
+        if not (0 <= x < 8 and 0 <= y < 8):
+            return False
+        if self.state.board.get_piece(x, y) is not None:
+            return False
+        if self.state.mines[y][x] == 1:
+            return False
+        if self.get_cell_effect(x, y) is not None:
+            return False
+        return True
+
+    def find_safe_anchor(self, ptype):
+        size = max(1, int(piece_size(ptype)))
+        anchors = []
+        for y in range(0, 8 - size + 1):
+            for x in range(0, 8 - size + 1):
+                ok = True
+                for dy in range(size):
+                    for dx in range(size):
+                        if not self.safe_cell_for_spawn(x + dx, y + dy):
+                            ok = False
+                            break
+                    if not ok:
+                        break
+                if ok:
+                    anchors.append((x, y))
+        if not anchors:
+            return None
+        return random.choice(anchors)
+
+    def spawn_shop_piece(self, color, ptype):
+        anchor = self.find_safe_anchor(ptype)
+        if not anchor:
+            return None
+        size = max(1, int(piece_size(ptype)))
+        piece = Piece(ptype, color, size=size, anchor=anchor)
+        self.state.board.place_piece(piece, anchor)
+        if piece.is_royal and piece.color in self.state.royal_counts:
+            self.state.royal_counts[piece.color] += 1
+        return anchor
 
     def get_cell_effect(self, x, y):
         if not (0 <= x < 8 and 0 <= y < 8):
@@ -1380,7 +1860,7 @@ class Room:
             send_json(conn, {"type":"error", "msg":"item_missing"})
             return
         effect_id = item.get("effect_id")
-        self.begin_chaos_action()
+        self.begin_chaos_action(color)
         if effect_id == "ms_item_place_mine":
             if not target or len(target) != 2:
                 send_json(conn, {"type":"error", "msg":"item_requires_target"})
@@ -1515,6 +1995,7 @@ class Room:
             hit = False
             shooter_ref = f"{self.piece_short(piece)} {self.coord_to_alg((sx, sy))}->{self.coord_to_alg((tx, ty))}"
             hit_ref = None
+            captured_value = 0
             cx, cy = sx, sy
             for _ in range(3):
                 nx, ny = cx + step_x, cy + step_y
@@ -1525,6 +2006,7 @@ class Room:
                 target_piece = self.state.board.get_piece(nx, ny)
                 if target_piece:
                     hit_ref = self.piece_ref((nx, ny), target_piece)
+                    captured_value = self.capture_coin_value(target_piece.ptype)
                     self.remove_piece_at(nx, ny)
                     hit = True
                     break
@@ -1535,6 +2017,8 @@ class Room:
                 self.log_event("Pistol", "piece", shooter_ref, extra=f"hit:{hit_ref}")
             else:
                 self.log_event("Pistol", "piece", shooter_ref, extra="miss")
+            if captured_value > 0:
+                self.award_coins(color, captured_value, reason="capture")
             self.mark_chaos_item()
             self.apply_chaos_after_action(action_type="item")
             if hit:
@@ -1674,4 +2158,5 @@ def serve():
 
 if __name__ == '__main__':
     serve()
+
 

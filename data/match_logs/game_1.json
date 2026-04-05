@@ -1,0 +1,2211 @@
+{
+  "game_id": 1,
+  "started_at": "2026-04-04T17:24:12",
+  "players": {
+    "white": "admin",
+    "black": "Player"
+  },
+  "events": [
+    {
+      "type": "game_start",
+      "text": "Game started",
+      "players": {
+        "white": "admin",
+        "black": "Player"
+      },
+      "ts": "2026-04-04 17:24:12"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №1 wP f2 -> f4; pack/effect: ні; events: —",
+      "piece": "wP",
+      "from": [
+        5,
+        1
+      ],
+      "to": [
+        5,
+        3
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:23",
+      "move": 1
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:24:23",
+      "move": 1
+    },
+    {
+      "type": "move",
+      "text": "[Move] №2 bP d7 -> d5; pack/effect: ні; events: —",
+      "piece": "bP",
+      "from": [
+        3,
+        6
+      ],
+      "to": [
+        3,
+        4
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:28",
+      "move": 2
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:24:28",
+      "move": 2
+    },
+    {
+      "type": "move",
+      "text": "[Move] №3 wN g1 -> f3; pack/effect: ні; events: —",
+      "piece": "wN",
+      "from": [
+        6,
+        0
+      ],
+      "to": [
+        5,
+        2
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:31",
+      "move": 3
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:24:31",
+      "move": 3
+    },
+    {
+      "type": "move",
+      "text": "[Move] №4 bN b8 -> c6; pack/effect: ні; events: —",
+      "piece": "bN",
+      "from": [
+        1,
+        7
+      ],
+      "to": [
+        2,
+        5
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:35",
+      "move": 4
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:24:35",
+      "move": 4
+    },
+    {
+      "type": "move",
+      "text": "[Move] №5 wP b2 -> b3; pack/effect: ні; events: —",
+      "piece": "wP",
+      "from": [
+        1,
+        1
+      ],
+      "to": [
+        1,
+        2
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:38",
+      "move": 5
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:24:38",
+      "move": 5
+    },
+    {
+      "type": "move",
+      "text": "[Move] №6 bN g8 -> f6; pack/effect: ні; events: —",
+      "piece": "bN",
+      "from": [
+        6,
+        7
+      ],
+      "to": [
+        5,
+        5
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:43",
+      "move": 6
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:24:43",
+      "move": 6
+    },
+    {
+      "type": "move",
+      "text": "[Move] №7 wB c1 -> b2; pack/effect: ні; events: —",
+      "piece": "wB",
+      "from": [
+        2,
+        0
+      ],
+      "to": [
+        1,
+        1
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:48",
+      "move": 7
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:24:48",
+      "move": 7
+    },
+    {
+      "type": "move",
+      "text": "[Move] №8 bB c8 -> f5; pack/effect: ні; events: —",
+      "piece": "bB",
+      "from": [
+        2,
+        7
+      ],
+      "to": [
+        5,
+        4
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:50",
+      "move": 8
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:24:50",
+      "move": 8
+    },
+    {
+      "type": "move",
+      "text": "[Move] №9 wN b1 -> c3; pack/effect: ні; events: —",
+      "piece": "wN",
+      "from": [
+        1,
+        0
+      ],
+      "to": [
+        2,
+        2
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:24:53",
+      "move": 9
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:24:53",
+      "move": 9
+    },
+    {
+      "type": "move",
+      "text": "[Move] №10 bB f5 -> c2; pack/effect: Pieces Expansion DLC: Активація; events: —",
+      "piece": "bB",
+      "from": [
+        5,
+        4
+      ],
+      "to": [
+        2,
+        1
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Активація"
+      ],
+      "events": [],
+      "ts": "2026-04-04 17:24:57",
+      "move": 10
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 2,
+      "reason": "capture",
+      "text": "Coins black +2",
+      "ts": "2026-04-04 17:24:57",
+      "move": 10
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:24:57",
+      "move": 10
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Активація",
+      "effect_id": null,
+      "text": "Pieces Expansion DLC: Активація",
+      "ts": "2026-04-04 17:24:57",
+      "move": 10
+    },
+    {
+      "type": "move",
+      "text": "[Move] №11 wK d1 -> c2; pack/effect: Pieces Expansion DLC: Спавн: Пішак; events: SpawnPiece (piece e3 white:pawn)",
+      "piece": "wK",
+      "from": [
+        3,
+        0
+      ],
+      "to": [
+        2,
+        1
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Спавн: Пішак"
+      ],
+      "events": [
+        "SpawnPiece (piece e3 white:pawn)"
+      ],
+      "ts": "2026-04-04 17:25:01",
+      "move": 11
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 4,
+      "reason": "capture",
+      "text": "Coins white +4",
+      "ts": "2026-04-04 17:25:01",
+      "move": 11
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:25:01",
+      "move": 11
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Спавн: Пішак",
+      "effect_id": "pe_spawn_piece",
+      "text": "Pieces Expansion DLC: Спавн: Пішак",
+      "ts": "2026-04-04 17:25:01",
+      "move": 11
+    },
+    {
+      "type": "event",
+      "name": "SpawnPiece",
+      "event_type": "piece",
+      "target": "e3",
+      "extra": "white:pawn",
+      "text": "SpawnPiece (piece e3 white:pawn)",
+      "ts": "2026-04-04 17:25:01",
+      "move": 11
+    },
+    {
+      "type": "move",
+      "text": "[Move] №12 bN f6 -> e4; pack/effect: ні; events: —",
+      "piece": "bN",
+      "from": [
+        5,
+        5
+      ],
+      "to": [
+        4,
+        3
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:25:10",
+      "move": 12
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:25:10",
+      "move": 12
+    },
+    {
+      "type": "move",
+      "text": "[Move] №13 wQ e1 -> h4; pack/effect: Pieces Expansion DLC: Зміна: Тура; events: ChangePiece (piece c7 black:pawn->rook)",
+      "piece": "wQ",
+      "from": [
+        4,
+        0
+      ],
+      "to": [
+        7,
+        3
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Зміна: Тура"
+      ],
+      "events": [
+        "ChangePiece (piece c7 black:pawn->rook)"
+      ],
+      "ts": "2026-04-04 17:25:16",
+      "move": 13
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:25:16",
+      "move": 13
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Зміна: Тура",
+      "effect_id": "pe_change_piece",
+      "text": "Pieces Expansion DLC: Зміна: Тура",
+      "ts": "2026-04-04 17:25:16",
+      "move": 13
+    },
+    {
+      "type": "event",
+      "name": "ChangePiece",
+      "event_type": "piece",
+      "target": "c7",
+      "extra": "black:pawn->rook",
+      "text": "ChangePiece (piece c7 black:pawn->rook)",
+      "ts": "2026-04-04 17:25:16",
+      "move": 13
+    },
+    {
+      "type": "move",
+      "text": "[Move] №14 bA b4 -> c2; pack/effect: ні; events: —",
+      "piece": "bA",
+      "from": [
+        1,
+        3
+      ],
+      "to": [
+        2,
+        1
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:25:37",
+      "move": 14
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 15,
+      "reason": "capture",
+      "text": "Coins black +15",
+      "ts": "2026-04-04 17:25:37",
+      "move": 14
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:25:37",
+      "move": 14
+    },
+    {
+      "type": "move",
+      "text": "[Move] №15 wN c3 -> d5; pack/effect: Pieces Expansion DLC: Спавн: Верблюд; events: SpawnPiece (piece f5 black:camel)",
+      "piece": "wN",
+      "from": [
+        2,
+        2
+      ],
+      "to": [
+        3,
+        4
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Спавн: Верблюд"
+      ],
+      "events": [
+        "SpawnPiece (piece f5 black:camel)"
+      ],
+      "ts": "2026-04-04 17:25:42",
+      "move": 15
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 2,
+      "reason": "capture",
+      "text": "Coins white +2",
+      "ts": "2026-04-04 17:25:42",
+      "move": 15
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:25:42",
+      "move": 15
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Спавн: Верблюд",
+      "effect_id": "pe_spawn_piece",
+      "text": "Pieces Expansion DLC: Спавн: Верблюд",
+      "ts": "2026-04-04 17:25:42",
+      "move": 15
+    },
+    {
+      "type": "event",
+      "name": "SpawnPiece",
+      "event_type": "piece",
+      "target": "f5",
+      "extra": "black:camel",
+      "text": "SpawnPiece (piece f5 black:camel)",
+      "ts": "2026-04-04 17:25:42",
+      "move": 15
+    },
+    {
+      "type": "move",
+      "text": "[Move] №16 bC f5 -> e2; pack/effect: Pieces Expansion DLC: Зміна: Тура; events: ChangePiece (piece g7 black:pawn->rook)",
+      "piece": "bC",
+      "from": [
+        5,
+        4
+      ],
+      "to": [
+        4,
+        1
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Зміна: Тура"
+      ],
+      "events": [
+        "ChangePiece (piece g7 black:pawn->rook)"
+      ],
+      "ts": "2026-04-04 17:25:52",
+      "move": 16
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 2,
+      "reason": "capture",
+      "text": "Coins black +2",
+      "ts": "2026-04-04 17:25:52",
+      "move": 16
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:25:52",
+      "move": 16
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Зміна: Тура",
+      "effect_id": "pe_change_piece",
+      "text": "Pieces Expansion DLC: Зміна: Тура",
+      "ts": "2026-04-04 17:25:52",
+      "move": 16
+    },
+    {
+      "type": "event",
+      "name": "ChangePiece",
+      "event_type": "piece",
+      "target": "g7",
+      "extra": "black:pawn->rook",
+      "text": "ChangePiece (piece g7 black:pawn->rook)",
+      "ts": "2026-04-04 17:25:52",
+      "move": 16
+    },
+    {
+      "type": "move",
+      "text": "[Move] №17 wB f1 -> e2; pack/effect: ні; events: —",
+      "piece": "wB",
+      "from": [
+        5,
+        0
+      ],
+      "to": [
+        4,
+        1
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:25:57",
+      "move": 17
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 4,
+      "reason": "capture",
+      "text": "Coins white +4",
+      "ts": "2026-04-04 17:25:57",
+      "move": 17
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:25:57",
+      "move": 17
+    },
+    {
+      "type": "move",
+      "text": "[Move] №18 bA c2 -> a1; pack/effect: Pieces Expansion DLC: Спавн: Гігантська пішака; events: SpawnPiece (piece c3 white:giant_pawn)",
+      "piece": "bA",
+      "from": [
+        2,
+        1
+      ],
+      "to": [
+        0,
+        0
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Спавн: Гігантська пішака"
+      ],
+      "events": [
+        "SpawnPiece (piece c3 white:giant_pawn)"
+      ],
+      "ts": "2026-04-04 17:26:01",
+      "move": 18
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 6,
+      "reason": "capture",
+      "text": "Coins black +6",
+      "ts": "2026-04-04 17:26:01",
+      "move": 18
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:26:01",
+      "move": 18
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Спавн: Гігантська пішака",
+      "effect_id": "pe_spawn_piece",
+      "text": "Pieces Expansion DLC: Спавн: Гігантська пішака",
+      "ts": "2026-04-04 17:26:01",
+      "move": 18
+    },
+    {
+      "type": "event",
+      "name": "SpawnPiece",
+      "event_type": "piece",
+      "target": "c3",
+      "extra": "white:giant_pawn",
+      "text": "SpawnPiece (piece c3 white:giant_pawn)",
+      "ts": "2026-04-04 17:26:01",
+      "move": 18
+    },
+    {
+      "type": "move",
+      "text": "[Move] №19 wG c3 -> b5; pack/effect: ні; events: —",
+      "piece": "wG",
+      "from": [
+        2,
+        2
+      ],
+      "to": [
+        1,
+        4
+      ],
+      "pack_effects": [],
+      "events": [],
+      "ts": "2026-04-04 17:26:13",
+      "move": 19
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 4,
+      "reason": "capture",
+      "text": "Coins white +4",
+      "ts": "2026-04-04 17:26:13",
+      "move": 19
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:26:13",
+      "move": 19
+    },
+    {
+      "type": "move",
+      "text": "[Move] №20 bR c7 -> c6; pack/effect: Chess+ DLC: Активація; events: —",
+      "piece": "bR",
+      "from": [
+        2,
+        6
+      ],
+      "to": [
+        2,
+        5
+      ],
+      "pack_effects": [
+        "Chess+ DLC: Активація"
+      ],
+      "events": [],
+      "ts": "2026-04-04 17:26:19",
+      "move": 20
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:26:19",
+      "move": 20
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Активація",
+      "effect_id": null,
+      "text": "Chess+ DLC: Активація",
+      "ts": "2026-04-04 17:26:19",
+      "move": 20
+    },
+    {
+      "type": "event",
+      "name": "Clone",
+      "event_type": "piece",
+      "target": "wA f5->e5",
+      "extra": null,
+      "text": "Clone (piece wA f5->e5)",
+      "ts": "2026-04-04 17:26:53"
+    },
+    {
+      "type": "event",
+      "name": "Clone",
+      "event_type": "piece",
+      "target": "wA e5->d4",
+      "extra": null,
+      "text": "Clone (piece wA e5->d4)",
+      "ts": "2026-04-04 17:27:04"
+    },
+    {
+      "type": "event",
+      "name": "Pistol",
+      "event_type": "piece",
+      "target": "wN d5->a8",
+      "extra": "hit:bR@c6",
+      "text": "Pistol (piece wN d5->a8 hit:bR@c6)",
+      "ts": "2026-04-04 17:27:17"
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 6,
+      "reason": "capture",
+      "text": "Coins white +6",
+      "ts": "2026-04-04 17:27:17"
+    },
+    {
+      "type": "event",
+      "name": "Pistol",
+      "event_type": "piece",
+      "target": "wN d5->d8",
+      "extra": "hit:bK@d8",
+      "text": "Pistol (piece wN d5->d8 hit:bK@d8)",
+      "ts": "2026-04-04 17:27:21"
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 15,
+      "reason": "capture",
+      "text": "Coins white +15",
+      "ts": "2026-04-04 17:27:21"
+    },
+    {
+      "type": "event",
+      "name": "Pistol",
+      "event_type": "piece",
+      "target": "wA f5->f7",
+      "extra": "hit:bP@f7",
+      "text": "Pistol (piece wA f5->f7 hit:bP@f7)",
+      "ts": "2026-04-04 17:27:25"
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 2,
+      "reason": "capture",
+      "text": "Coins white +2",
+      "ts": "2026-04-04 17:27:25"
+    },
+    {
+      "type": "event",
+      "name": "Pistol",
+      "event_type": "piece",
+      "target": "wA e5->g7",
+      "extra": "hit:bR@g7",
+      "text": "Pistol (piece wA e5->g7 hit:bR@g7)",
+      "ts": "2026-04-04 17:27:27"
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 6,
+      "reason": "capture",
+      "text": "Coins white +6",
+      "ts": "2026-04-04 17:27:27"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №21 wN d5 -> e7; pack/effect: Minesweeper DLC: Спавн міни; events: SpawnMine (tile a3 count:1)",
+      "piece": "wN",
+      "from": [
+        3,
+        4
+      ],
+      "to": [
+        4,
+        6
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн міни"
+      ],
+      "events": [
+        "SpawnMine (tile a3 count:1)"
+      ],
+      "ts": "2026-04-04 17:27:30",
+      "move": 21
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 2,
+      "reason": "capture",
+      "text": "Coins white +2",
+      "ts": "2026-04-04 17:27:30",
+      "move": 21
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:27:30",
+      "move": 21
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн міни",
+      "effect_id": "ms_spawn_mine",
+      "text": "Minesweeper DLC: Спавн міни",
+      "ts": "2026-04-04 17:27:30",
+      "move": 21
+    },
+    {
+      "type": "event",
+      "name": "SpawnMine",
+      "event_type": "tile",
+      "target": "a3",
+      "extra": "count:1",
+      "text": "SpawnMine (tile a3 count:1)",
+      "ts": "2026-04-04 17:27:30",
+      "move": 21
+    },
+    {
+      "type": "move",
+      "text": "[Move] №22 bQ e8 -> b5; pack/effect: Minesweeper DLC: Спавн міни; Chess+ DLC: Клітинка-кубик; events: SpawnMine (tile g3 count:1), DiceTile (tile a6 count:1)",
+      "piece": "bQ",
+      "from": [
+        4,
+        7
+      ],
+      "to": [
+        1,
+        4
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн міни",
+        "Chess+ DLC: Клітинка-кубик"
+      ],
+      "events": [
+        "SpawnMine (tile g3 count:1)",
+        "DiceTile (tile a6 count:1)"
+      ],
+      "ts": "2026-04-04 17:27:36",
+      "move": 22
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:27:36",
+      "move": 22
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн міни",
+      "effect_id": "ms_spawn_mine",
+      "text": "Minesweeper DLC: Спавн міни",
+      "ts": "2026-04-04 17:27:36",
+      "move": 22
+    },
+    {
+      "type": "event",
+      "name": "SpawnMine",
+      "event_type": "tile",
+      "target": "g3",
+      "extra": "count:1",
+      "text": "SpawnMine (tile g3 count:1)",
+      "ts": "2026-04-04 17:27:36",
+      "move": 22
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Клітинка-кубик",
+      "effect_id": "cp_dice_tile",
+      "text": "Chess+ DLC: Клітинка-кубик",
+      "ts": "2026-04-04 17:27:36",
+      "move": 22
+    },
+    {
+      "type": "event",
+      "name": "DiceTile",
+      "event_type": "tile",
+      "target": "a6",
+      "extra": "count:1",
+      "text": "DiceTile (tile a6 count:1)",
+      "ts": "2026-04-04 17:27:36",
+      "move": 22
+    },
+    {
+      "type": "event",
+      "name": "Nuke",
+      "event_type": "board",
+      "target": "b3",
+      "extra": "armed",
+      "text": "Nuke (board b3 armed)",
+      "ts": "2026-04-04 17:27:53"
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 2,
+      "reason": "explosion",
+      "text": "Coins white +2",
+      "ts": "2026-04-04 17:27:53"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №23 wA d4 -> b5; pack/effect: Minesweeper DLC: Відкрити числа; Chess+ DLC: Клітинка-кубик; events: RevealNumbers (board h3,g2,h2,f4,b2,b4 count:6), DiceTile (tile d3 count:1)",
+      "piece": "wA",
+      "from": [
+        3,
+        3
+      ],
+      "to": [
+        1,
+        4
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Відкрити числа",
+        "Chess+ DLC: Клітинка-кубик"
+      ],
+      "events": [
+        "RevealNumbers (board h3,g2,h2,f4,b2,b4 count:6)",
+        "DiceTile (tile d3 count:1)"
+      ],
+      "ts": "2026-04-04 17:28:00",
+      "move": 23
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 15,
+      "reason": "capture",
+      "text": "Coins white +15",
+      "ts": "2026-04-04 17:28:00",
+      "move": 23
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:28:00",
+      "move": 23
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Відкрити числа",
+      "effect_id": "ms_reveal_numbers",
+      "text": "Minesweeper DLC: Відкрити числа",
+      "ts": "2026-04-04 17:28:00",
+      "move": 23
+    },
+    {
+      "type": "event",
+      "name": "RevealNumbers",
+      "event_type": "board",
+      "target": "h3,g2,h2,f4,b2,b4",
+      "extra": "count:6",
+      "text": "RevealNumbers (board h3,g2,h2,f4,b2,b4 count:6)",
+      "ts": "2026-04-04 17:28:00",
+      "move": 23
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Клітинка-кубик",
+      "effect_id": "cp_dice_tile",
+      "text": "Chess+ DLC: Клітинка-кубик",
+      "ts": "2026-04-04 17:28:00",
+      "move": 23
+    },
+    {
+      "type": "event",
+      "name": "DiceTile",
+      "event_type": "tile",
+      "target": "d3",
+      "extra": "count:1",
+      "text": "DiceTile (tile d3 count:1)",
+      "ts": "2026-04-04 17:28:00",
+      "move": 23
+    },
+    {
+      "type": "move",
+      "text": "[Move] №24 bA a1 -> h1; pack/effect: Minesweeper DLC: Випадковий вибух; Chess+ DLC: Клонування; events: Explosion (tile a3 random)",
+      "piece": "bA",
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        7,
+        0
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Випадковий вибух",
+        "Chess+ DLC: Клонування"
+      ],
+      "events": [
+        "Explosion (tile a3 random)"
+      ],
+      "ts": "2026-04-04 17:28:05",
+      "move": 24
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 6,
+      "reason": "capture",
+      "text": "Coins black +6",
+      "ts": "2026-04-04 17:28:05",
+      "move": 24
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:28:05",
+      "move": 24
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Випадковий вибух",
+      "effect_id": "ms_explode_random",
+      "text": "Minesweeper DLC: Випадковий вибух",
+      "ts": "2026-04-04 17:28:05",
+      "move": 24
+    },
+    {
+      "type": "event",
+      "name": "Explosion",
+      "event_type": "tile",
+      "target": "a3",
+      "extra": "random",
+      "text": "Explosion (tile a3 random)",
+      "ts": "2026-04-04 17:28:05",
+      "move": 24
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Клонування",
+      "effect_id": "cp_item_clone",
+      "text": "Chess+ DLC: Клонування",
+      "ts": "2026-04-04 17:28:05",
+      "move": 24
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 2,
+      "reason": "explosion",
+      "text": "Coins black +2",
+      "ts": "2026-04-04 17:28:05",
+      "move": 24
+    },
+    {
+      "type": "event",
+      "name": "Teleport",
+      "event_type": "piece",
+      "target": "wA b5->a6",
+      "extra": null,
+      "text": "Teleport (piece wA b5->a6)",
+      "ts": "2026-04-04 17:28:24"
+    },
+    {
+      "type": "event",
+      "name": "Dice",
+      "event_type": "piece",
+      "target": "wA@a6",
+      "extra": "item:Клонування",
+      "text": "Dice (piece wA@a6 item:Клонування)",
+      "ts": "2026-04-04 17:28:24"
+    },
+    {
+      "type": "event",
+      "name": "Clone",
+      "event_type": "piece",
+      "target": "wA a6->b5",
+      "extra": null,
+      "text": "Clone (piece wA a6->b5)",
+      "ts": "2026-04-04 17:28:28"
+    },
+    {
+      "type": "event",
+      "name": "Explosion",
+      "event_type": "tile",
+      "target": "g3",
+      "extra": "item",
+      "text": "Explosion (tile g3 item)",
+      "ts": "2026-04-04 17:28:32"
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 2,
+      "reason": "explosion",
+      "text": "Coins white +2",
+      "ts": "2026-04-04 17:28:32"
+    },
+    {
+      "type": "event",
+      "name": "Teleport",
+      "event_type": "piece",
+      "target": "wA e5->d7",
+      "extra": null,
+      "text": "Teleport (piece wA e5->d7)",
+      "ts": "2026-04-04 17:28:35"
+    },
+    {
+      "type": "event",
+      "name": "Teleport",
+      "event_type": "piece",
+      "target": "wA d7->d6",
+      "extra": null,
+      "text": "Teleport (piece wA d7->d6)",
+      "ts": "2026-04-04 17:28:36"
+    },
+    {
+      "type": "event",
+      "name": "Teleport",
+      "event_type": "piece",
+      "target": "wA d6->e6",
+      "extra": null,
+      "text": "Teleport (piece wA d6->e6)",
+      "ts": "2026-04-04 17:28:38"
+    },
+    {
+      "type": "event",
+      "name": "Teleport",
+      "event_type": "piece",
+      "target": "wA e6->d3",
+      "extra": null,
+      "text": "Teleport (piece wA e6->d3)",
+      "ts": "2026-04-04 17:28:40"
+    },
+    {
+      "type": "event",
+      "name": "Dice",
+      "event_type": "piece",
+      "target": "wP@d3",
+      "extra": "amazon->pawn",
+      "text": "Dice (piece wP@d3 amazon->pawn)",
+      "ts": "2026-04-04 17:28:40"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №25 wP d3 -> e4; pack/effect: Minesweeper DLC: Спавн мін (2-5); Chess+ DLC: Безодня; events: SpawnMines (tile d5,a1,a2,e8,g4 count:5), Void (tile a3 spawn)",
+      "piece": "wP",
+      "from": [
+        3,
+        2
+      ],
+      "to": [
+        4,
+        3
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн мін (2-5)",
+        "Chess+ DLC: Безодня"
+      ],
+      "events": [
+        "SpawnMines (tile d5,a1,a2,e8,g4 count:5)",
+        "Void (tile a3 spawn)"
+      ],
+      "ts": "2026-04-04 17:28:41",
+      "move": 25
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 4,
+      "reason": "capture",
+      "text": "Coins white +4",
+      "ts": "2026-04-04 17:28:41",
+      "move": 25
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:28:41",
+      "move": 25
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн мін (2-5)",
+      "effect_id": "ms_spawn_mines",
+      "text": "Minesweeper DLC: Спавн мін (2-5)",
+      "ts": "2026-04-04 17:28:41",
+      "move": 25
+    },
+    {
+      "type": "event",
+      "name": "SpawnMines",
+      "event_type": "tile",
+      "target": "d5,a1,a2,e8,g4",
+      "extra": "count:5",
+      "text": "SpawnMines (tile d5,a1,a2,e8,g4 count:5)",
+      "ts": "2026-04-04 17:28:41",
+      "move": 25
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Безодня",
+      "effect_id": "cp_void",
+      "text": "Chess+ DLC: Безодня",
+      "ts": "2026-04-04 17:28:41",
+      "move": 25
+    },
+    {
+      "type": "event",
+      "name": "Void",
+      "event_type": "tile",
+      "target": "a3",
+      "extra": "spawn",
+      "text": "Void (tile a3 spawn)",
+      "ts": "2026-04-04 17:28:41",
+      "move": 25
+    },
+    {
+      "type": "move",
+      "text": "[Move] №26 bP b7 -> a6; pack/effect: Minesweeper DLC: Спавн міни; Chess+ DLC: Бомба; events: Clone (piece wP@e4 expired), Dice (piece bP@a6 item:Пістолет), SpawnMine (tile a5 count:1), BombTile (tile h4 count:1)",
+      "piece": "bP",
+      "from": [
+        1,
+        6
+      ],
+      "to": [
+        0,
+        5
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн міни",
+        "Chess+ DLC: Бомба"
+      ],
+      "events": [
+        "Clone (piece wP@e4 expired)",
+        "Dice (piece bP@a6 item:Пістолет)",
+        "SpawnMine (tile a5 count:1)",
+        "BombTile (tile h4 count:1)"
+      ],
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 15,
+      "reason": "capture",
+      "text": "Coins black +15",
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "event",
+      "name": "Clone",
+      "event_type": "piece",
+      "target": "wP@e4",
+      "extra": "expired",
+      "text": "Clone (piece wP@e4 expired)",
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "event",
+      "name": "Dice",
+      "event_type": "piece",
+      "target": "bP@a6",
+      "extra": "item:Пістолет",
+      "text": "Dice (piece bP@a6 item:Пістолет)",
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн міни",
+      "effect_id": "ms_spawn_mine",
+      "text": "Minesweeper DLC: Спавн міни",
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "event",
+      "name": "SpawnMine",
+      "event_type": "tile",
+      "target": "a5",
+      "extra": "count:1",
+      "text": "SpawnMine (tile a5 count:1)",
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Бомба",
+      "effect_id": "cp_bomb_tile",
+      "text": "Chess+ DLC: Бомба",
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "event",
+      "name": "BombTile",
+      "event_type": "tile",
+      "target": "h4",
+      "extra": "count:1",
+      "text": "BombTile (tile h4 count:1)",
+      "ts": "2026-04-04 17:28:47",
+      "move": 26
+    },
+    {
+      "type": "move",
+      "text": "[Move] №27 wA f5 -> f3; pack/effect: Minesweeper DLC: Спавн мін (2-5); Chess+ DLC: Клітинка-кубик; events: SpawnMines (tile g6,g3,g7,f5 count:4), DiceTile (tile h3 count:1)",
+      "piece": "wA",
+      "from": [
+        5,
+        4
+      ],
+      "to": [
+        5,
+        2
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Спавн мін (2-5)",
+        "Chess+ DLC: Клітинка-кубик"
+      ],
+      "events": [
+        "SpawnMines (tile g6,g3,g7,f5 count:4)",
+        "DiceTile (tile h3 count:1)"
+      ],
+      "ts": "2026-04-04 17:28:52",
+      "move": 27
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:28:52",
+      "move": 27
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Спавн мін (2-5)",
+      "effect_id": "ms_spawn_mines",
+      "text": "Minesweeper DLC: Спавн мін (2-5)",
+      "ts": "2026-04-04 17:28:52",
+      "move": 27
+    },
+    {
+      "type": "event",
+      "name": "SpawnMines",
+      "event_type": "tile",
+      "target": "g6,g3,g7,f5",
+      "extra": "count:4",
+      "text": "SpawnMines (tile g6,g3,g7,f5 count:4)",
+      "ts": "2026-04-04 17:28:52",
+      "move": 27
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Клітинка-кубик",
+      "effect_id": "cp_dice_tile",
+      "text": "Chess+ DLC: Клітинка-кубик",
+      "ts": "2026-04-04 17:28:52",
+      "move": 27
+    },
+    {
+      "type": "event",
+      "name": "DiceTile",
+      "event_type": "tile",
+      "target": "h3",
+      "extra": "count:1",
+      "text": "DiceTile (tile h3 count:1)",
+      "ts": "2026-04-04 17:28:52",
+      "move": 27
+    },
+    {
+      "type": "move",
+      "text": "[Move] №28 bA h1 -> h6; pack/effect: Pieces Expansion DLC: Деактивація; Minesweeper DLC: Показати та підірвати міну; Chess+ DLC: Мутації пішаків; events: PawnMutation (piece h7,d2 count:2)",
+      "piece": "bA",
+      "from": [
+        7,
+        0
+      ],
+      "to": [
+        7,
+        5
+      ],
+      "pack_effects": [
+        "Pieces Expansion DLC: Деактивація",
+        "Minesweeper DLC: Показати та підірвати міну",
+        "Chess+ DLC: Мутації пішаків"
+      ],
+      "events": [
+        "PawnMutation (piece h7,d2 count:2)"
+      ],
+      "ts": "2026-04-04 17:29:01",
+      "move": 28
+    },
+    {
+      "type": "coins",
+      "color": "black",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins black +1",
+      "ts": "2026-04-04 17:29:01",
+      "move": 28
+    },
+    {
+      "type": "pack",
+      "pack": "Pieces Expansion DLC",
+      "pack_id": "piecesexpansion",
+      "action": "Деактивація",
+      "effect_id": null,
+      "text": "Pieces Expansion DLC: Деактивація",
+      "ts": "2026-04-04 17:29:01",
+      "move": 28
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Показати та підірвати міну",
+      "effect_id": "ms_item_reveal_explode",
+      "text": "Minesweeper DLC: Показати та підірвати міну",
+      "ts": "2026-04-04 17:29:01",
+      "move": 28
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Мутації пішаків",
+      "effect_id": "cp_pawn_mutation",
+      "text": "Chess+ DLC: Мутації пішаків",
+      "ts": "2026-04-04 17:29:01",
+      "move": 28
+    },
+    {
+      "type": "event",
+      "name": "PawnMutation",
+      "event_type": "piece",
+      "target": "h7,d2",
+      "extra": "count:2",
+      "text": "PawnMutation (piece h7,d2 count:2)",
+      "ts": "2026-04-04 17:29:01",
+      "move": 28
+    },
+    {
+      "type": "event",
+      "name": "Teleport",
+      "event_type": "piece",
+      "target": "wN e7->h4",
+      "extra": null,
+      "text": "Teleport (piece wN e7->h4)",
+      "ts": "2026-04-04 17:29:07"
+    },
+    {
+      "type": "event",
+      "name": "Bomb",
+      "event_type": "tile",
+      "target": "h4",
+      "extra": "armed",
+      "text": "Bomb (tile h4 armed)",
+      "ts": "2026-04-04 17:29:07"
+    },
+    {
+      "type": "move",
+      "text": "[Move] №29 wN h4 -> f5; pack/effect: Minesweeper DLC: Поставити міну; Chess+ DLC: Пістолет; events: Explosion (tile f5 mine)",
+      "piece": "wN",
+      "from": [
+        7,
+        3
+      ],
+      "to": [
+        5,
+        4
+      ],
+      "pack_effects": [
+        "Minesweeper DLC: Поставити міну",
+        "Chess+ DLC: Пістолет"
+      ],
+      "events": [
+        "Explosion (tile f5 mine)"
+      ],
+      "ts": "2026-04-04 17:29:10",
+      "move": 29
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 1,
+      "reason": "survival",
+      "text": "Coins white +1",
+      "ts": "2026-04-04 17:29:10",
+      "move": 29
+    },
+    {
+      "type": "event",
+      "name": "Explosion",
+      "event_type": "tile",
+      "target": "f5",
+      "extra": "mine",
+      "text": "Explosion (tile f5 mine)",
+      "ts": "2026-04-04 17:29:10",
+      "move": 29
+    },
+    {
+      "type": "pack",
+      "pack": "Minesweeper DLC",
+      "pack_id": "minesweeper",
+      "action": "Поставити міну",
+      "effect_id": "ms_item_place_mine",
+      "text": "Minesweeper DLC: Поставити міну",
+      "ts": "2026-04-04 17:29:10",
+      "move": 29
+    },
+    {
+      "type": "pack",
+      "pack": "Chess+ DLC",
+      "pack_id": "chessplus",
+      "action": "Пістолет",
+      "effect_id": "cp_item_pistol",
+      "text": "Chess+ DLC: Пістолет",
+      "ts": "2026-04-04 17:29:10",
+      "move": 29
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 2,
+      "reason": "explosion",
+      "text": "Coins white +2",
+      "ts": "2026-04-04 17:29:10",
+      "move": 29
+    },
+    {
+      "type": "game_over",
+      "reason": "royal_captured",
+      "winner": "white",
+      "final_move": 29,
+      "final_move_text": "[Move] №29 wN h4 -> f5; pack/effect: Minesweeper DLC: Поставити міну; Chess+ DLC: Пістолет; events: Explosion (tile f5 mine)",
+      "final_position": {
+        "board": [
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            {
+              "ptype": "pawn",
+              "color": "white",
+              "gid": 7
+            },
+            {
+              "ptype": "bishop",
+              "color": "white",
+              "gid": 26,
+              "anchor": [
+                4,
+                1
+              ]
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            {
+              "ptype": "pawn",
+              "color": "white",
+              "gid": 33,
+              "anchor": [
+                4,
+                2
+              ]
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            {
+              "ptype": "amazon",
+              "color": "white",
+              "gid": 40,
+              "anchor": [
+                1,
+                4
+              ]
+            },
+            {
+              "ptype": "giant_pawn",
+              "color": "white",
+              "gid": 36,
+              "size": 2,
+              "anchor": [
+                1,
+                4
+              ]
+            },
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "ptype": "pawn",
+              "color": "black",
+              "gid": 4,
+              "anchor": [
+                0,
+                5
+              ]
+            },
+            {
+              "ptype": "giant_pawn",
+              "color": "white",
+              "gid": 36,
+              "size": 2,
+              "anchor": [
+                1,
+                4
+              ]
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "ptype": "pawn",
+              "color": "black",
+              "gid": 2
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "ptype": "rook",
+              "color": "black",
+              "gid": 19
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        ],
+        "mines": [
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0
+          ]
+        ],
+        "revealed": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "adj_counts": [
+          [
+            1,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "craters": [
+          [
+            6,
+            2
+          ],
+          [
+            6,
+            5
+          ],
+          [
+            5,
+            4
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            6,
+            6
+          ],
+          [
+            6,
+            3
+          ]
+        ],
+        "chessplus_cells": [
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "void",
+            null,
+            null,
+            "dice",
+            null,
+            null,
+            null,
+            "dice"
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "bomb"
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "dice",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        ],
+        "chessplus_walls": [],
+        "chessplus_bombs": {
+          "7,3": 1
+        },
+        "chessplus_void": {
+          "cells": [
+            [
+              0,
+              2
+            ]
+          ],
+          "next_expand": 0
+        },
+        "chessplus_mutations": {
+          "7,6": "longstep",
+          "3,1": "longstep"
+        },
+        "chessplus_clones": {
+          "1,4": 1
+        },
+        "chessplus_nukes": [
+          {
+            "center": [
+              1,
+              2
+            ],
+            "timer": 2
+          }
+        ]
+      },
+      "final_score": {
+        "royals": {
+          "white": 1,
+          "black": 0
+        },
+        "material": {
+          "white": 20,
+          "black": 7
+        }
+      },
+      "comment": "Кінець гри: Знищені всі королівські фігури суперника. Переможець: білий. Рахунок: королівські 1-0, матеріал 20-7.",
+      "text": "Game over: royal_captured (white)",
+      "ts": "2026-04-04 17:29:10"
+    },
+    {
+      "type": "coins",
+      "color": "white",
+      "amount": 10,
+      "reason": "win",
+      "text": "Coins white +10",
+      "ts": "2026-04-04 17:29:10"
+    }
+  ]
+}

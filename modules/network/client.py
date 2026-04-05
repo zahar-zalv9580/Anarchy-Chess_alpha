@@ -135,6 +135,12 @@ class Client:
         self.intro_video_frame_surface = None
         self.intro_video_frame_index = -1
         self.intro_use_video = False
+        self.menu_video_path = self.assets_root / "video" / "menu_bg.mp4"
+        self.menu_video_cap = None
+        self.menu_video_fps = 30.0
+        self.menu_video_last_time = 0.0
+        self.menu_video_frame_surface = None
+        self.menu_use_video = False
         self.menu_logo_cache = {}
         self.font_cache = {}
         self.local_ip_cache = None
@@ -142,6 +148,13 @@ class Client:
         self.inventory_bar_image = None
         self.inventory_bar_size = None
         self.inventory_slot_rects = {}
+        self.coin_popups = []
+        self.last_coin_balance = None
+        self.shop_scroll = 0
+        self.shop_offer_rects = {}
+        self.shop_scroll_rects = {}
+        self.shop_back_rect = None
+        self.shop_button_rect = None
         self.mine_reveals = []
         self.hint_move_surface = None
         self.hint_capture_surface = None
@@ -321,6 +334,13 @@ class Client:
         self.prev_state = None
         self.piece_animations = []
         self.last_nuke_event_id = 0
+        self.coin_popups = []
+        self.last_coin_balance = None
+        self.shop_scroll = 0
+        self.shop_offer_rects = {}
+        self.shop_scroll_rects = {}
+        self.shop_back_rect = None
+        self.shop_button_rect = None
         self.clear_item_targeting()
         if hasattr(self, "popup"):
             del self.popup
@@ -376,6 +396,8 @@ class Client:
     def shutdown(self):
         self.disconnect()
         self.stop_server_process()
+        if self.menu_video_cap:
+            self.menu_video_cap.release()
         self.running = False
 
     def listen_loop(self):
@@ -424,6 +446,7 @@ class Client:
         self.load_explosion_frames()
         self.load_mine_image()
         self.prepare_intro()
+        self.init_menu_video()
         clock = pygame.time.Clock()
         font = self.get_font("main", 26)
         big_font = self.get_font("main", 32)
@@ -470,6 +493,9 @@ class Client:
                         self.handle_inventory_key(slot)
                     elif ev.key == pygame.K_ESCAPE:
                         self.clear_item_targeting()
+                if ev.type == pygame.KEYDOWN and self.ui_state == "shop":
+                    if ev.key == pygame.K_ESCAPE:
+                        self.ui_state = "game"
 
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                     if self.ui_state == "menu":
@@ -599,6 +625,25 @@ class Client:
                                 self.play_sfx_list(self.sfx_click)
                                 self.replay_playing = False
                                 self.set_replay_index(self.get_replay_total_moves())
+                    elif self.ui_state == "shop":
+                        if self.shop_back_rect and self.shop_back_rect.collidepoint(ev.pos):
+                            self.play_sfx_list(self.sfx_click)
+                            self.ui_state = "game"
+                        else:
+                            scroll_rects = self.shop_scroll_rects or {}
+                            if scroll_rects.get("up") and scroll_rects["up"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.adjust_shop_scroll(-1)
+                                continue
+                            if scroll_rects.get("down") and scroll_rects["down"].collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.adjust_shop_scroll(1)
+                                continue
+                            for offer_id, rect in (self.shop_offer_rects or {}).items():
+                                if rect.collidepoint(ev.pos):
+                                    self.play_sfx_list(self.sfx_click)
+                                    self.try_shop_buy(offer_id)
+                                    break
                     elif self.ui_state == "game":
                         if time.time() < self.move_block_until:
                             continue
@@ -616,6 +661,13 @@ class Client:
                                     selected = None
                                     self.restart_game()
                         elif self.state:
+                            if self.shop_button_rect and self.shop_button_rect.collidepoint(ev.pos):
+                                self.play_sfx_list(self.sfx_click)
+                                self.clear_item_targeting()
+                                selected = None
+                                self.shop_scroll = 0
+                                self.ui_state = "shop"
+                                continue
                             if self.handle_inventory_click(ev.pos):
                                 continue
                             if self.handle_item_click(ev.pos):
@@ -641,12 +693,21 @@ class Client:
                 if ev.type == pygame.MOUSEWHEEL and self.ui_state == "replay":
                     if ev.y != 0:
                         self.adjust_replay_scroll(-ev.y)
+                if ev.type == pygame.MOUSEWHEEL and self.ui_state == "shop":
+                    if ev.y != 0:
+                        self.adjust_shop_scroll(-ev.y)
 
                 if ev.type == pygame.MOUSEBUTTONDOWN and ev.button in (4, 5) and self.ui_state == "replay":
                     delta = -1 if ev.button == 4 else 1
                     self.adjust_replay_scroll(delta)
+                if ev.type == pygame.MOUSEBUTTONDOWN and ev.button in (4, 5) and self.ui_state == "shop":
+                    delta = -1 if ev.button == 4 else 1
+                    self.adjust_shop_scroll(delta)
 
             self.sync_music()
+            if self.ui_state == "menu":
+                self.update_menu_video()
+
             screen.fill(self.colors["vanilla_bg"])
 
             if self.ui_state == "intro":
@@ -663,7 +724,7 @@ class Client:
                 self.draw_settings(screen, big_font, font, mouse_pos)
             elif self.ui_state == "replay":
                 self.draw_replay(screen, big_font, font, mouse_pos)
-            elif self.ui_state == "game":
+            elif self.ui_state in ("game", "shop"):
                 self.game_over_buttons = {}
                 self.hover_cell = None
                 if not self.game_over:
@@ -696,6 +757,8 @@ class Client:
                     self.draw_game_over(screen, big_font, font, mouse_pos)
                 if hasattr(self,'popup'):
                     self.draw_popup(screen, font)
+                if self.ui_state == "shop":
+                    self.draw_shop(screen, big_font, font, mouse_pos)
 
             self.apply_chaos_visuals(screen)
             pygame.display.flip()
@@ -896,6 +959,12 @@ class Client:
         return ip
 
     def draw_menu(self, screen, title_font, font, mouse_pos):
+        # Відеофон
+        if self.menu_use_video and self.menu_video_frame_surface:
+            screen.blit(self.menu_video_frame_surface, (0, 0))
+        else:
+            # Якщо відео немає – заливаємо фон стандартним кольором
+            screen.fill(self.colors["vanilla_bg"])
         title = title_font.render("Anarchy Chess", True, self.colors["vanilla_secondary"])
         screen.blit(title, title.get_rect(center=(self.winw//2, self.winh//2 - 120)))
         rects = self.menu_buttons()
@@ -1808,11 +1877,11 @@ class Client:
             return None
         if self.ui_state in ("menu", "mode", "host_menu", "name", "settings", "replay"):
             return "menu"
-        if self.ui_state == "game" and self.state is not None:
+        if self.ui_state in ("game", "shop") and self.state is not None:
             chaos = int(getattr(self.state, "chaos", 0))
             if chaos >= 67:
                 return "chaos"
-        if self.ui_state == "game" and not self.has_state:
+        if self.ui_state in ("game", "shop") and not self.has_state:
             return "menu"
         return "game"
 
@@ -2101,6 +2170,7 @@ class Client:
                 pass
         self.intro_video_cap = None
         self.intro_use_video = False
+    
 
     def draw_intro(self, screen, font):
         if self.intro_start_time is None:
@@ -2181,6 +2251,58 @@ class Client:
             overlay = pygame.Surface((self.winw, self.winh), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, int(255 * min(1.0, fade_alpha))))
             screen.blit(overlay, (0, 0))
+
+    
+    def init_menu_video(self):
+        if not CV2_AVAILABLE:
+            self.menu_use_video = False
+            return
+        if not self.menu_video_path.exists():
+            self.menu_use_video = False
+            return
+        try:
+            cap = cv2.VideoCapture(str(self.menu_video_path))
+            if cap.isOpened():
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                if fps and fps > 1:
+                    self.menu_video_fps = float(fps)
+                else:
+                    self.menu_video_fps = 30.0
+                self.menu_video_cap = cap
+                self.menu_use_video = True
+                self.menu_video_last_time = 0.0
+                self.menu_video_frame_surface = None
+            else:
+                cap.release()
+        except Exception as e:
+            print("Помилка відкриття menu bg відео:", e)
+            self.menu_video_cap = None
+            self.menu_use_video = False
+
+    def update_menu_video(self):
+        if not self.menu_use_video or self.menu_video_cap is None:
+            return
+        now = time.time()
+        # Оновлюємо кадр раз на ~1/fps секунд
+        if now - self.menu_video_last_time >= 1.0 / self.menu_video_fps:
+            ret, frame_bgr = self.menu_video_cap.read()
+            if not ret or frame_bgr is None:
+                # Зациклюємо: перемотуємо на початок
+                self.menu_video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame_bgr = self.menu_video_cap.read()
+            if ret and frame_bgr is not None:
+                try:
+                    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                    h, w = frame_rgb.shape[:2]
+                    surf = pygame.image.frombuffer(frame_rgb.tobytes(), (w, h), "RGB")
+                    # Масштабуємо до розміру вікна
+                    self.menu_video_frame_surface = pygame.transform.smoothscale(surf, (self.winw, self.winh))
+                except Exception as e:
+                    print("Помилка обробки кадру menu bg:", e)
+                    self.menu_video_frame_surface = None
+            self.menu_video_last_time = now
+
+
 
     def update_effects_from_state(self):
         if not self.state:
@@ -2276,6 +2398,17 @@ class Client:
         if self.selected_item_slot is not None:
             if not self.get_inventory_item(self.selected_item_slot):
                 self.clear_item_targeting()
+
+        if self.my_color and hasattr(self.state, "coins"):
+            curr = int(getattr(self.state, "coins", {}).get(self.my_color, 0))
+            prev = None
+            if self.prev_state and hasattr(self.prev_state, "coins"):
+                prev = int(getattr(self.prev_state, "coins", {}).get(self.my_color, 0))
+            elif self.last_coin_balance is not None:
+                prev = int(self.last_coin_balance)
+            if prev is not None and curr > prev:
+                self.add_coin_popup(curr - prev)
+            self.last_coin_balance = curr
 
         self.prev_state = self.state
 
@@ -3047,6 +3180,49 @@ class Client:
         self.number_cache[key] = img
         return img
 
+    def get_ui_image(self, name, size):
+        key = ("ui", name, size)
+        if key in self.texture_cache:
+            return self.texture_cache[key]
+        base = self.assets_root / "textures" / "ui"
+        mapping = {
+            "shop": ["shop_icon.png", "shop.png"],
+            "coin": ["shg.png", "coin.png", "shg_coin.png"],
+            "dlc": ["dlc_pack.png", "dlc.png"],
+        }
+        names = mapping.get(name, [])
+        path = None
+        for filename in names:
+            cand = base / filename
+            if cand.exists():
+                path = cand
+                break
+        img = None
+        if path and path.exists():
+            try:
+                img = pygame.image.load(str(path)).convert_alpha()
+                if size:
+                    img = pygame.transform.smoothscale(img, (size, size))
+            except Exception:
+                img = None
+        self.texture_cache[key] = img
+        return img
+
+    def get_shop_bg(self, size):
+        key = ("shop_bg", size)
+        if key in self.texture_cache:
+            return self.texture_cache[key]
+        path = self.assets_root / "textures" / "ui" / "shop_bg.png"
+        img = None
+        if path.exists():
+            try:
+                img = pygame.image.load(str(path)).convert_alpha()
+                img = pygame.transform.smoothscale(img, size)
+            except Exception:
+                img = None
+        self.texture_cache[key] = img
+        return img
+
     def get_item_image(self, effect_id, size):
         key = (effect_id, size)
         if key in self.item_texture_cache:
@@ -3264,8 +3440,99 @@ class Client:
             "item_requires_target": "Потрібна ціль",
             "invalid_target": "Невірна ціль",
             "unknown_item": "Невідомий предмет",
+            "inventory_full": "Інвентар заповнений",
+            "shop_insufficient_funds": "Недостатньо ШахоГривень",
+            "shop_offer_invalid": "Пропозиція недоступна",
+            "shop_pack_inactive": "DLC-пак неактивний",
+            "shop_pack_active": "DLC-пак вже активний",
+            "shop_effect_pending": "Наступний ефект уже задано",
+            "shop_effect_unavailable": "Ефект недоступний",
+            "shop_no_safe_cell": "Нема безпечної клітинки",
         }
         return mapping.get(code, code)
+
+    def get_my_coins(self):
+        if not self.state or not self.my_color:
+            return 0
+        coins = getattr(self.state, "coins", {})
+        if isinstance(coins, dict):
+            return int(coins.get(self.my_color, 0))
+        return 0
+
+    def add_coin_popup(self, amount):
+        if amount <= 0:
+            return
+        self.coin_popups.append({"amount": int(amount), "start": time.time()})
+
+    def draw_coin_popups(self, screen, font, center_x, base_y):
+        if not self.coin_popups:
+            return
+        now = time.time()
+        alive = []
+        for popup in self.coin_popups:
+            age = now - popup["start"]
+            if age > 1.6:
+                continue
+            alive.append(popup)
+            fade = max(0.0, 1.0 - age / 1.6)
+            rise = int(age * 30)
+            alpha = int(255 * fade)
+            amount = popup.get("amount", 0)
+            text = f"+{amount} ШахоГривень"
+            txt = font.render(text, True, (255, 230, 160))
+            txt.set_alpha(alpha)
+            icon_size = max(16, int(font.get_height() * 0.9))
+            icon = self.get_ui_image("coin", icon_size)
+            total_w = txt.get_width() + (icon_size + 6 if icon else 0)
+            x = int(center_x - total_w // 2)
+            y = int(base_y - rise)
+            if icon:
+                icon_surf = icon.copy()
+                icon_surf.set_alpha(alpha)
+                screen.blit(icon_surf, (x, y))
+                x += icon_size + 6
+            screen.blit(txt, (x, y))
+        self.coin_popups = alive
+
+    def get_shop_offers(self):
+        if not self.state:
+            return []
+        shop = getattr(self.state, "shop", None) or {}
+        offers = shop.get("offers", [])
+        return offers if isinstance(offers, list) else []
+
+    def shop_layout(self):
+        panel_w = int(self.winw * 0.72)
+        panel_h = int(self.winh * 0.76)
+        panel_rect = pygame.Rect((self.winw - panel_w) // 2, (self.winh - panel_h) // 2, panel_w, panel_h)
+        list_rect = pygame.Rect(panel_rect.x + 24, panel_rect.y + 84, panel_rect.w - 48, panel_rect.h - 150)
+        return {"panel": panel_rect, "list": list_rect}
+
+    def adjust_shop_scroll(self, delta):
+        offers = self.get_shop_offers()
+        if not offers:
+            self.shop_scroll = 0
+            return
+        layout = self.shop_layout()
+        row_h = 76
+        visible = max(1, layout["list"].height // row_h)
+        max_offset = max(0, len(offers) - visible)
+        self.shop_scroll = max(0, min(self.shop_scroll + int(delta), max_offset))
+
+    def try_shop_buy(self, offer_id):
+        offers = self.get_shop_offers()
+        offer = next((o for o in offers if o.get("id") == offer_id), None)
+        if not offer:
+            self.last_error = "shop_offer_invalid"
+            return
+        price = int(offer.get("price") or 0)
+        if self.get_my_coins() < price:
+            self.last_error = "shop_insufficient_funds"
+            return
+        try:
+            send_json(self.sock, {"type": "shop_buy", "offer_id": offer_id})
+        except Exception:
+            self.last_error = "shop_offer_invalid"
 
     def get_chaos_value(self):
         if not self.state:
@@ -3287,7 +3554,7 @@ class Client:
         return (r, g, b)
 
     def get_chaos_text_offset(self):
-        if self.ui_state not in ("game", "replay"):
+        if self.ui_state not in ("game", "replay", "shop"):
             return (0, 0)
         chaos = self.get_chaos_value()
         if chaos < 80:
@@ -3312,7 +3579,7 @@ class Client:
         pygame.draw.rect(screen, (120, 120, 120), back_rect, 1, border_radius=6)
 
     def apply_chaos_visuals(self, screen):
-        if self.ui_state not in ("game", "replay"):
+        if self.ui_state not in ("game", "replay", "shop"):
             return
         chaos = self.get_chaos_value()
         if chaos <= 80:
@@ -3368,6 +3635,37 @@ class Client:
         black_text = font.render(f"Чорний: {black_name}", True, text_color)
         screen.blit(white_text, (board_x + ox, top_y + oy))
         screen.blit(black_text, (board_x + board_size - black_text.get_width() + ox, top_y + oy))
+
+        # coins + shop
+        center_x = board_x + board_size // 2
+        coin_icon = self.get_ui_image("coin", 20)
+        coins = self.get_my_coins()
+        coin_text = font.render(f"{coins} ШГ", True, (240, 230, 180))
+        panel_h = 28
+        panel_w = max(180, coin_text.get_width() + (26 if coin_icon else 0) + 90)
+        panel_rect = pygame.Rect(center_x - panel_w // 2, top_y + 26, panel_w, panel_h)
+        pygame.draw.rect(screen, (36, 30, 46), panel_rect, border_radius=8)
+        pygame.draw.rect(screen, self.colors["vanilla_button_border"], panel_rect, 1, border_radius=8)
+
+        cx = panel_rect.x + 8
+        cy = panel_rect.y + (panel_h - coin_text.get_height()) // 2
+        if coin_icon:
+            screen.blit(coin_icon, (cx, panel_rect.y + 4))
+            cx += 24
+        screen.blit(coin_text, (cx, cy))
+
+        shop_rect = pygame.Rect(panel_rect.right - 74, panel_rect.y + 3, 68, panel_h - 6)
+        self.shop_button_rect = shop_rect
+        shop_icon = self.get_ui_image("shop", 18)
+        if shop_icon:
+            screen.blit(shop_icon, shop_icon.get_rect(center=shop_rect.center))
+        else:
+            label = font.render("Shop", True, (230, 230, 230))
+            screen.blit(label, label.get_rect(center=shop_rect.center))
+        pygame.draw.rect(screen, self.colors["vanilla_button_border"], shop_rect, 1, border_radius=6)
+
+        # coin gain popups
+        self.draw_coin_popups(screen, font, center_x, top_y + 10)
 
     def wrap_text(self, text, font, max_width):
         if not text:
@@ -3664,6 +3962,147 @@ class Client:
                 ty += line_h
 
         self.draw_status_panel(screen, font, status_rect)
+
+    def draw_shop(self, screen, big_font, font, mouse_pos):
+        overlay = pygame.Surface((self.winw, self.winh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 170))
+        screen.blit(overlay, (0, 0))
+
+        layout = self.shop_layout()
+        panel = layout["panel"]
+        list_rect = layout["list"]
+        bg = self.get_shop_bg((panel.w, panel.h))
+        if bg:
+            screen.blit(bg, panel.topleft)
+        else:
+            pygame.draw.rect(screen, (28, 24, 36), panel, border_radius=14)
+        pygame.draw.rect(screen, self.colors["vanilla_button_border"], panel, 2, border_radius=14)
+
+        title_font = self.get_font("accent", 38)
+        title = title_font.render("ChesShop", True, self.colors["vanilla_secondary"])
+        screen.blit(title, (panel.x + 22, panel.y + 14))
+
+        # back button
+        back_rect = pygame.Rect(panel.x + 22, panel.y + panel.h - 54, 120, 36)
+        self.shop_back_rect = back_rect
+        self.draw_button(screen, back_rect, "Назад", font, "shop_back", back_rect.collidepoint(mouse_pos))
+
+        # coins display
+        coin_icon = self.get_ui_image("coin", 24)
+        coins = self.get_my_coins()
+        coins_text = font.render(f"{coins} ШГ", True, (240, 230, 180))
+        coin_x = panel.right - 22 - coins_text.get_width() - (24 + 6 if coin_icon else 0)
+        coin_y = panel.y + 22
+        if coin_icon:
+            screen.blit(coin_icon, (coin_x, coin_y))
+            coin_x += 24 + 6
+        screen.blit(coins_text, (coin_x, coin_y))
+
+        offers = self.get_shop_offers()
+        row_h = 76
+        visible = max(1, list_rect.height // row_h)
+        max_offset = max(0, len(offers) - visible)
+        self.shop_scroll = max(0, min(self.shop_scroll, max_offset))
+        self.shop_offer_rects = {}
+
+        if not offers:
+            empty = font.render("Немає пропозицій", True, (200, 200, 200))
+            screen.blit(empty, empty.get_rect(center=list_rect.center))
+        else:
+            start = self.shop_scroll
+            end = min(len(offers), start + visible)
+            for idx in range(start, end):
+                offer = offers[idx]
+                row_y = list_rect.y + (idx - start) * row_h
+                row_rect = pygame.Rect(list_rect.x, row_y, list_rect.w, row_h - 8)
+                base = (40, 34, 50) if idx % 2 == 0 else (34, 30, 44)
+                pygame.draw.rect(screen, base, row_rect, border_radius=10)
+                pygame.draw.rect(screen, (90, 80, 110), row_rect, 1, border_radius=10)
+
+                icon_size = row_rect.height - 16
+                icon = None
+                otype = offer.get("type")
+                if otype == "item":
+                    icon = self.get_item_image(offer.get("effect_id"), icon_size)
+                elif otype == "effect":
+                    effect_id = offer.get("effect_id", "")
+                    effect_map = {
+                        "cp_dice_tile": "dice",
+                        "cp_fire_tile": "fire",
+                        "cp_void": "void",
+                        "cp_bomb_tile": "bomb",
+                        "cp_swap_tile": "swap",
+                        "cp_wall": "wall",
+                        "cp_pawn_mutation": "pawn_mutation",
+                    }
+                    icon = self.get_effect_image(effect_map.get(effect_id, ""), icon_size)
+                elif otype == "piece":
+                    ptype = offer.get("ptype", "pawn")
+                    piece_color = self.my_color or "white"
+                    dummy = type("P", (), {})()
+                    dummy.ptype = ptype
+                    dummy.color = piece_color
+                    dummy.size = piece_size(ptype)
+                    icon = self.get_piece_image(dummy)
+                    if icon:
+                        icon = pygame.transform.smoothscale(icon, (icon_size, icon_size))
+                elif otype == "pack":
+                    icon = self.get_ui_image("dlc", icon_size)
+                if icon:
+                    screen.blit(icon, (row_rect.x + 10, row_rect.y + 8))
+
+                text_x = row_rect.x + 18 + (icon_size if icon else 0)
+                text_y = row_rect.y + 8
+                name = offer.get("name", "Offer")
+                pack_name = offer.get("pack_name")
+                title_surf = self.fit_text_surface(font, name, row_rect.width - 210, (230, 230, 230), max_height=20)
+                screen.blit(title_surf, (text_x, text_y))
+                if pack_name:
+                    pack_surf = self.fit_text_surface(font, pack_name, row_rect.width - 210, (170, 170, 170), max_height=18)
+                    screen.blit(pack_surf, (text_x, text_y + 20))
+                rarity = offer.get("rarity")
+                if rarity:
+                    rarity_colors = {
+                        "common": (190, 190, 190),
+                        "uncommon": (130, 200, 160),
+                        "rare": (120, 160, 230),
+                        "epic": (200, 140, 240),
+                        "legendary": (240, 200, 120),
+                    }
+                    r_col = rarity_colors.get(rarity, (180, 180, 180))
+                    r_label = rarity.upper()
+                    r_surf = font.render(r_label, True, r_col)
+                    screen.blit(r_surf, (text_x, row_rect.bottom - r_surf.get_height() - 6))
+
+                price = int(offer.get("price") or 0)
+                price_text = font.render(str(price), True, (240, 230, 180))
+                price_x = row_rect.right - 140
+                price_y = row_rect.centery - price_text.get_height() // 2
+                coin_icon = self.get_ui_image("coin", 18)
+                if coin_icon:
+                    screen.blit(coin_icon, (price_x, price_y))
+                    price_x += 22
+                screen.blit(price_text, (price_x, price_y))
+
+                buy_rect = pygame.Rect(row_rect.right - 90, row_rect.centery - 16, 76, 32)
+                can_buy = self.get_my_coins() >= price
+                self.shop_offer_rects[offer.get("id")] = buy_rect
+                if can_buy:
+                    self.draw_button(screen, buy_rect, "Купити", font, f"shop_buy_{offer.get('id')}", buy_rect.collidepoint(mouse_pos))
+                else:
+                    pygame.draw.rect(screen, (80, 80, 80), buy_rect, border_radius=6)
+                    pygame.draw.rect(screen, (120, 120, 120), buy_rect, 1, border_radius=6)
+                    txt = font.render("Купити", True, (200, 200, 200))
+                    screen.blit(txt, txt.get_rect(center=buy_rect.center))
+
+        # scroll controls
+        self.shop_scroll_rects = {}
+        if max_offset > 0:
+            up_rect = pygame.Rect(list_rect.right - 26, list_rect.y - 6, 22, 22)
+            down_rect = pygame.Rect(list_rect.right - 26, list_rect.bottom - 16, 22, 22)
+            self.shop_scroll_rects = {"up": up_rect, "down": down_rect}
+            self.draw_button(screen, up_rect, "^", font, "shop_scroll_up", up_rect.collidepoint(mouse_pos))
+            self.draw_button(screen, down_rect, "v", font, "shop_scroll_down", down_rect.collidepoint(mouse_pos))
 
     def draw_status_panel(self, screen, font, rect):
         pygame.draw.rect(screen, (44, 36, 58), rect, border_radius=8)

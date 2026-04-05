@@ -33,6 +33,8 @@ class GameState:
         self.nuke_event_id = 0
         self.chaos = 0
         self.extra_piece_types = []
+        self.coins = {"white": 0, "black": 0}
+        self.shop = {"offers": [], "last_refresh": 0}
 
     def setup_starting_position(self):
         starting_setup(self.board)
@@ -87,6 +89,8 @@ class GameState:
             "nuke_event_id": self.nuke_event_id,
             "chaos": self.chaos,
             "extra_piece_types": self.extra_piece_types,
+            "coins": self.coins,
+            "shop": self.shop,
         }
 
     @staticmethod
@@ -140,4 +144,6 @@ class GameState:
         s.nuke_event_id = d.get('nuke_event_id', 0)
         s.chaos = d.get('chaos', 0)
         s.extra_piece_types = d.get('extra_piece_types', [])
+        s.coins = d.get('coins', {"white": 0, "black": 0})
+        s.shop = d.get('shop', {"offers": [], "last_refresh": 0})
         return s
